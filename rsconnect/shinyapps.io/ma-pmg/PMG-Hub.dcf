@@ -1,0 +1,12 @@
+name: PMG-Hub
+title: PMG-Hub
+username: ma-pmg
+account: ma-pmg
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14648338
+bundleId: 10204623
+url: https://ma-pmg.shinyapps.io/PMG-Hub/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

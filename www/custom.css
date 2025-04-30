@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Merriweather&display=swap'); 
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans&display=swap');
+ 
+ .h1, .h2, .h3, .h4, .h5, .h6, h1, h2, h3, h4, h5, h6 {
+    font-family: 'Merriweather';
+}
+
+.h1, .h2, .h3, h1, h2, h3 {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+body {
+    font-family: 'IBM Plex Sans';
+    font-weight: 400;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+ 
+ .skin-blue .main-header .logo {
+  text-align: left;
+  font-family: 'Merriweather';
+  background-color: #820361;
+}
+    
+        
+.skin-blue .main-header .logo:hover {
+  background-color: #820361;
+}
+   
+        
+.skin-blue .main-header .navbar {
+  background-color: #820361;
+}   
+  
+        
+.skin-blue .main-sidebar {
+  background-color: #454759;
+  font-family: 'Merriweather';
+}
+
+/* active sidebar menu item */
+.skin-blue .main-sidebar .sidebar .sidebar-menu a:hover{
+        background-color: white;
+        color:black;
+}
+ 
+        
+.skin-blue .main-header .navbar .sidebar-toggle:hover{
+  background-color: #000000;
+}
+
+.skin-blue .sidebar-menu > li.active > a,
+.skin-blue .sidebar-menu > li:hover > a {
+  border-left-color: #820361;
+}
+
+input[type="checkbox"] {
+  accent-color: #820361;
+}
