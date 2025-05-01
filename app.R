@@ -87,7 +87,9 @@ body <-
               paste0("fixed_weight", 1:10) |> purrr::map(weight_input)
             )
           )
-        )
+        ),
+        
+        shiny::uiOutput("download")
       ),
       
       ## Blended Strategy Bundler-----------------------------------------------------
@@ -105,6 +107,30 @@ body <-
   )
 
 ui     <- shinydashboard::dashboardPage(header, sidebar, body)
-server <- function(input, output) {}
+
+server <- function(input, output) {
+
+  output$downloadSuite <- downloadHandler(
+    
+    filename = function() {
+      paste0(input$suite, ".xlsx")
+    },
+    
+    content = function(file) {
+      openxlsx::write.xlsx(x = input$strategies |> 
+                             purrr::map_dfr(
+                               .f         = build_suite,
+                               x          = equity_allocation(input),
+                               y          = fixed_allocation(input),
+                               suite_name = input$suite,
+                               ids        = platform), 
+                           file)
+    }
+  )
+  
+  output$download <- renderUI(downloadButton("downloadSuite", "Download"))
+  
+  
+}
 
 shinyApp(ui = ui, server = server)
