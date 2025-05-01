@@ -38,58 +38,53 @@ body <-
         tabName = "suite_builder",
         h1("Suite Builder"),
         
-        "Define equity and fixed income allocations. Generate suite of sleeve strategies.",
+        "Define equity and fixed income allocations. Generate a suite of sleeve strategies.",
         
         br(),
         br(),
-        
-        shiny::textInput(
-          inputId = "suite",
-          label = "Suite Name"
-        ),
-        
-        shiny::checkboxGroupInput(
-          inputId  = "strategies", 
-          label    = "Strategies to Build",
-          inline   = TRUE,
-          choices  = seq(from = 100, to = 10, by = -10),
-          selected = seq(from = 100, to = 10, by = -10)
-        ),
         
         fluidRow(
-          column(
-            6,
-            h3("Equity Sleeves"),
+          column(4,shiny::textInput(inputId = "suite", label = "Suite Name")),
+          column(6,
+                 shiny::checkboxGroupInput(
+                   inputId  = "strategies", 
+                   label    = "Strategies to Build",
+                   inline   = TRUE,
+                   choices  = seq(from = 100, to = 10, by = -10),
+                   selected = seq(from = 100, to = 10, by = -10)))
+          
+        ),
+        
+        
+        
+        fluidRow(
+          column(6, h3("Equity Sleeves"),
             
-            column(
-              9,
-              paste0("equity", 1:10) |> purrr::map(sleeve_input, df = platform),
-            ),
+            column(9, paste0("equity", 1:7) |> purrr::map(sleeve_input, df = platform)),
+            column(3, paste0("equity_weight", 1:7) |> purrr::map(weight_input))
             
-            column(
-              3,
-              paste0("equity_weight", 1:10) |> purrr::map(weight_input)
-              
-            )
           ),
           
-          column(
-            6,
-            h3("Fixed Income Sleeves"),
+          column(6, h3("Fixed Income Sleeves"),
             
             column(
               9,
-              paste0("fixed", 1:10) |> purrr::map(sleeve_input, df = platform)
+              paste0("fixed", 1:7) |> purrr::map(sleeve_input, df = platform)
             ),
             
             column(
               3,
-              paste0("fixed_weight", 1:10) |> purrr::map(weight_input)
+              paste0("fixed_weight", 1:7) |> purrr::map(weight_input)
             )
           )
         ),
         
-        shiny::uiOutput("download")
+        br(),
+        br(),
+        
+        fluidRow(
+          column(2, shiny::uiOutput("download"))
+        )
       ),
       
       ## Blended Strategy Bundler-----------------------------------------------------
@@ -128,7 +123,7 @@ server <- function(input, output) {
     }
   )
   
-  output$download <- renderUI(downloadButton("downloadSuite", "Download"))
+  output$download <- renderUI(downloadButton("downloadSuite", "Download", width = "100%"))
   
   
 }
