@@ -1,3 +1,5 @@
+source("R/bs_bundler.R")
+
 platform <- aws.s3::get_object(
   region = Sys.getenv("AWS_DEFAULT_REGION"),
   key    = Sys.getenv("AWS_ACCESS_KEY_ID"),
@@ -33,7 +35,7 @@ body <-
     shinydashboard::tabItems(
       
       
-      ## Suite Builder ---------------------------------------------------------------
+      ## Suite Builder ---------------------------------------------------------
       shinydashboard::tabItem(
         tabName = "suite_builder",
         h1("Suite Builder"),
@@ -59,23 +61,23 @@ body <-
         
         fluidRow(
           column(6, h3("Equity Sleeves"),
-            
-            column(9, paste0("equity", 1:7) |> purrr::map(sleeve_input, df = platform)),
-            column(3, paste0("equity_weight", 1:7) |> purrr::map(weight_input))
-            
+                 
+                 column(9, paste0("equity", 1:7) |> purrr::map(sleeve_input, df = platform)),
+                 column(3, paste0("equity_weight", 1:7) |> purrr::map(weight_input))
+                 
           ),
           
           column(6, h3("Fixed Income Sleeves"),
-            
-            column(
-              9,
-              paste0("fixed", 1:7) |> purrr::map(sleeve_input, df = platform)
-            ),
-            
-            column(
-              3,
-              paste0("fixed_weight", 1:7) |> purrr::map(weight_input)
-            )
+                 
+                 column(
+                   9,
+                   paste0("fixed", 1:7) |> purrr::map(sleeve_input, df = platform)
+                 ),
+                 
+                 column(
+                   3,
+                   paste0("fixed_weight", 1:7) |> purrr::map(weight_input)
+                 )
           )
         ),
         
@@ -87,16 +89,16 @@ body <-
         )
       ),
       
-      ## Blended Strategy Bundler-----------------------------------------------------
+      ## Blended Strategy Bundler-----------------------------------------------
       shinydashboard::tabItem(
         tabName = "blended_bundler",
-        h2("Blended Strategy Bundler")
+        bs_bundlerUI("blended_bundler"),
+        
       ),
       
-      ## Portfolio Builder------------------------------------------------------------
+      ## Portfolio Builder------------------------------------------------------
       shinydashboard::tabItem(
-        tabName = "portfolio_builder",
-        h2("Portfolio Builder")
+        tabName = "portfolio_builder"
       )
     )
   )
@@ -104,27 +106,31 @@ body <-
 ui     <- shinydashboard::dashboardPage(header, sidebar, body)
 
 server <- function(input, output) {
-
+  
+  # Suite Builder
   output$downloadSuite <- downloadHandler(
-    
+
     filename = function() {
       paste0(input$suite, ".xlsx")
     },
-    
+
     content = function(file) {
-      openxlsx::write.xlsx(x = input$strategies |> 
+      openxlsx::write.xlsx(x = input$strategies |>
                              purrr::map_dfr(
                                .f         = build_suite,
                                x          = equity_allocation(input),
                                y          = fixed_allocation(input),
                                suite_name = input$suite,
-                               ids        = platform), 
+                               ids        = platform),
                            file)
     }
   )
-  
+
   output$download <- renderUI(downloadButton("downloadSuite", "Download", width = "100%"))
   
+  
+  # Blended Strategy Bundler
+  bundle <- bs_bundlerServer("blended_bundler")
   
 }
 

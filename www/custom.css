@@ -65,3 +65,8 @@ input[type="checkbox"] {
     color: white;
     border-color: #ddd;
 }
+
+.progress-bar {
+    background-color: #454759;
+
+}
