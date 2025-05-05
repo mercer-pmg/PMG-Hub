@@ -1,3 +1,4 @@
+
 source("R/bs_bundler.R")
 
 platform <- aws.s3::get_object(
@@ -98,7 +99,8 @@ body <-
       
       ## Portfolio Builder------------------------------------------------------
       shinydashboard::tabItem(
-        tabName = "portfolio_builder"
+        tabName = "portfolio_builder",
+        tibble::tibble("Asset" = "U.S. Large Cap", Weight = 1) |> kdot::expected_return()
       )
     )
   )
