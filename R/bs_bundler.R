@@ -49,6 +49,7 @@ bs_bundlerServer <- function(id){
         
         content = function(file) {
           openxlsx::write.xlsx(x = bundle(), file)
+          
         }
       )
       
