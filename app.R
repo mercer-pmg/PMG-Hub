@@ -50,8 +50,7 @@ body <-
       ## Portfolio Builder------------------------------------------------------
       shinydashboard::tabItem(
         tabName = "portfolio_builder",
-        tibble::tibble("Asset" = "U.S. Large Cap", Weight = 1) |> 
-          kdot::expected_return()
+        portfolioBuilderUI("portfolio_builder")
       )
     )
   )
