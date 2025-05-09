@@ -13,7 +13,7 @@ orion_platform <- aws.s3::get_object(
 
 header <- 
   shinydashboard::dashboardHeader(
-    title = "PMG Hub",
+    title = "PMG Apps",
     titleWidth = 210)
 
 sidebar <- 
@@ -22,7 +22,8 @@ sidebar <-
     shinydashboard::sidebarMenu(
       shinydashboard::menuItem("Suite Builder", tabName = "suite_builder"),
       shinydashboard::menuItem("Blended Strategy Bundler", tabName = "blended_bundler"),
-      shinydashboard::menuItem("Portfolio Builder", tabName = "portfolio_builder")
+      shinydashboard::menuItem("Portfolio Builder", tabName = "portfolio_builder"),
+      shinydashboard::menuItem("Orion Products Audit", tabName = "products_audit")
     )
   )
 
@@ -51,6 +52,13 @@ body <-
       shinydashboard::tabItem(
         tabName = "portfolio_builder",
         portfolioBuilderUI("portfolio_builder")
+        
+      ),
+      
+      ## Orion Products Audit---------------------------------------------------
+      shinydashboard::tabItem(
+        tabName = "products_audit",
+        productsAuditUI("products_audit")
       )
     )
   )
@@ -59,11 +67,16 @@ ui     <- shinydashboard::dashboardPage(header, sidebar, body)
 
 server <- function(input, output) {
   
+  options(shiny.maxRequestSize=50*1024^2)
+  
   # Suite Builder
   suite_builderServer("suite_builder", platform = orion_platform)
   
   # Blended Strategy Bundler
   bundle <- bs_bundlerServer("blended_bundler")
+  
+  # Orion Products Audit
+  productsAuditServer("products_audit")
   
 }
 
