@@ -20,10 +20,22 @@ sidebar <-
   shinydashboard::dashboardSidebar(
     width = 210,
     shinydashboard::sidebarMenu(
-      shinydashboard::menuItem("Suite Builder", tabName = "suite_builder"),
-      shinydashboard::menuItem("Blended Strategy Bundler", tabName = "blended_bundler"),
-      shinydashboard::menuItem("Portfolio Builder", tabName = "portfolio_builder"),
-      shinydashboard::menuItem("Orion Products Audit", tabName = "products_audit")
+      
+      shinydashboard::menuItem(
+        text    = "Suite Builder", 
+        tabName = "suite_builder"),
+      
+      shinydashboard::menuItem(
+        text    = "Blended Strategy Bundler", 
+        tabName = "blended_bundler"),
+      
+      shinydashboard::menuItem(
+        text    = "Portfolio Builder", 
+        tabName = "portfolio_builder"),
+      
+      shinydashboard::menuItem(
+        text    = "Orion Products Audit", 
+        tabName = "products_audit")
     )
   )
 
