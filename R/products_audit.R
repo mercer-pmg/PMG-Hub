@@ -66,6 +66,124 @@ productsAuditUI <- function(id) {
 
 productsAuditServer <- function(id) {
   
+<<<<<<< HEAD
+=======
+  # ## Create workbook----
+  # create_classification_wb <- function(all_local) {
+  #   
+  #   reviewed   <- all_local |> dplyr::filter(!`Auto Assigned`) |> dplyr::mutate(`Assigned Asset Class` = NA)
+  #   unreviewed <- all_local |> dplyr::filter(`Auto Assigned`)
+  #   unreviewed_aum <- unreviewed |> dplyr::filter(AUM != 0)
+  #   
+  #   # Remove CUSIPs with underscore, dash
+  #   unreviewed_aum <- unreviewed_aum |>
+  #     dplyr::filter(!stringr::str_detect(CUSIP, "_")) |>
+  #     dplyr::filter(!stringr::str_detect(CUSIP, "-"))
+  #   
+  #   dat <- unreviewed_aum
+  #   
+  #   dat <- dat |>
+  #     dplyr::mutate(
+  #       `Product Sub Type Name` = `Product Sub Type Name` |> stringr::str_remove_all("/"),
+  #       `Assigned Asset Class`  = NA)
+  #   
+  #   keys_n <- dat |>
+  #     dplyr::group_by(`Product Sub Type Name`) |>
+  #     dplyr::summarise(n = dplyr::n()) |>
+  #     dplyr::arrange(dplyr::desc(n)) |>
+  #     dplyr::mutate(
+  #       `Product Sub Type Name` = `Product Sub Type Name` |>
+  #         stringr::str_replace_na()
+  #     )
+  #   
+  #   dat <- dat |> dplyr::group_by(`Product Sub Type Name`)
+  #   keys <- dplyr::group_keys(dat) |> dplyr::pull() |> stringr::str_replace_na()
+  #   
+  #   dat <- dat |> dplyr::group_split()
+  #   dat <- dat |> purrr::map(as.data.frame)
+  #   names(dat) <- keys
+  #   
+  #   dat[["Mutual Fund"]] <- dat[["Mutual Fund"]] |>
+  #     dplyr::mutate(Segment = NA)
+  #   
+  #   wb <- openxlsx::createWorkbook()
+  #   
+  #   openxlsx::addWorksheet(wb, "Status")
+  #   openxlsx::writeData(wb, "Status", keys_n)
+  #   
+  #   for(i in 1:length(dat)) {
+  #     openxlsx::addWorksheet(wb, names(dat)[i])
+  #     openxlsx::writeDataTable(wb, names(dat)[i], dat[[i]])
+  #   }
+  #   
+  #   openxlsx::addWorksheet(wb, "Classified")
+  #   openxlsx::writeDataTable(wb, "Classified", reviewed)
+  #   
+  #   # Add asset classes
+  #   framework <- readr::read_csv("MA Product Classification Framework.csv")
+  #   
+  #   openxlsx::addWorksheet(wb, "Asset Classes", visible = FALSE)
+  #   openxlsx::writeData(wb, "Asset Classes", x = framework)
+  #   
+  #   add_classes <- function(x){
+  #     
+  #     openxlsx::dataValidation(
+  #       wb    = wb,
+  #       sheet = x,
+  #       cols  = 13,
+  #       rows  = 2:(keys_n$n[i]+1),
+  #       type  = "list",
+  #       value = paste0("'Asset Classes'!$D$2:$D$", (nrow(framework)+1)))
+  #     
+  #     openxlsx::addStyle(
+  #       wb    = wb,
+  #       sheet = x,
+  #       style = openxlsx::createStyle(fgFill = "#C5D9F1"),
+  #       cols  = 13,
+  #       rows  = 2:(keys_n$n[i]+1))
+  #     
+  #   }
+  #   
+  #   for(i in 1:length(keys)){
+  #     add_classes(keys_n$`Product Sub Type Name`[i])
+  #   }
+  #   
+  #   openxlsx::dataValidation(
+  #     wb = wb,
+  #     sheet = "Classified",
+  #     cols = 13,
+  #     rows = 2:(nrow(reviewed)+1),
+  #     type = "list",
+  #     value = paste0("'Asset Classes'!$D$2:$D$", (nrow(framework)+1))
+  #   )
+  #   
+  #   openxlsx::addStyle(
+  #     wb    = wb,
+  #     sheet = "Classified",
+  #     style = openxlsx::createStyle(fgFill = "#C5D9F1"),
+  #     cols  = 13,
+  #     rows  = 2:(nrow(reviewed)+1)
+  #   )
+  #   
+  #   
+  #   # Add FactSet functions
+  #   openxlsx::writeFormula(
+  #     wb       = wb,
+  #     sheet    = "Mutual Fund",
+  #     x        = paste0('FDS(D', 2:(nrow(dat[["Mutual Fund"]])+1),',"FFD_SEG")'),
+  #     startRow = 2,
+  #     startCol = 14
+  #   )
+  #   
+  #   return(wb)
+  #   
+  #   
+  # }
+  
+  
+  
+  
+>>>>>>> dc52a251620b34b108451f8c6c7f924cbb6436d5
   create_orion_import <- function(sheet_with_assignments) {
     
     framework <- readr::read_csv("MA Product Classification Framework.csv")
