@@ -66,98 +66,7 @@ productsAuditUI <- function(id) {
 
 productsAuditServer <- function(id) {
   
-  create_orion_import <- function(sheet_with_assignments) {
-    
-    framework <- readr::read_csv("MA Product Classification Framework.csv")
-    
-    sheet_names <- openxlsx::getSheetNames(sheet_with_assignments)
-    bad_names   <- c("__FDSCACHE__","Asset Classes", "Status")
-    sheet_names <- sheet_names[!sheet_names %in% bad_names]
-    
-    get_assignments <- function(sheet_name){
-      
-      print(sheet_name)
-      
-      dat <- openxlsx::read.xlsx(
-        xlsxFile  = sheet_with_assignments,
-        sheet     = sheet_name,
-        sep.names = " ") |>
-        dplyr::select(`Product ID`, CUSIP, `Assigned Asset Class`) |>
-        dplyr::mutate(`Assigned Asset Class` = as.character(`Assigned Asset Class`))
-      
-      return(dat)
-      
-    }
-    
-    upload <- sheet_names |> purrr::map_df(get_assignments)
-    
-    upload <- upload |>
-      dplyr::filter(!is.na(`Assigned Asset Class`)) |>
-      dplyr::mutate(`Asset Class` = `Assigned Asset Class`) |>
-      dplyr::select(-`Assigned Asset Class`)
-    
-    upload <- dplyr::left_join(
-      x  = upload,
-      y  = framework,
-      by = "Asset Class")
-    
-    upload <- upload |>
-      dplyr::select(`Product ID`, `Risk Category ID`, `Asset Class ID`)
-    
-    upload <- upload |>  
-      dplyr::mutate(
-        `Product Name Override`  = NA,
-        Color                    = NA,
-        `Is Auto Assigned`       = FALSE,
-        `S&P Bond Rating`        = NA,
-        `Moody Bond Rating`      = NA,
-        `Product Status`         = NA,
-        `Is Disabled`            = NA,
-        `Is Custodial Cash`      = NA,
-        `Is Managed`             = NA,
-        `Use Global Tax Setting` = NA,
-        `Federally Taxable`      = NA,
-        `State Taxable`          = NA,
-        `Annual Income Rate`     = NA,
-        `ADV Asset Category`     = NA,
-        `Is ADV Reportable`      = NA,
-        `Is 13F Reportable`      = NA,
-        `Has Fees`               = NA)
-    
-    upload <- upload |>
-      dplyr::select(
-        `Product ID`,
-        `Product Name Override`,
-        `Asset Class ID`,
-        `Risk Category ID`,
-        `Color`,
-        `Is Auto Assigned`,
-        `S&P Bond Rating`,
-        `Moody Bond Rating`,
-        `Product Status`,
-        `Is Disabled`,
-        `Is Custodial Cash`,
-        `Is Managed`,
-        `Use Global Tax Setting`,
-        `Federally Taxable`,
-        `State Taxable`,
-        `Annual Income Rate`,
-        `ADV Asset Category`,
-        `Is ADV Reportable`,
-        `Is 13F Reportable`,
-        `Has Fees`)
-    
-    return(upload)
-    
-    
-  }
-  
-  
-  
-  
-  
-  
-  shiny::moduleServer(
+    shiny::moduleServer(
     id,
     
     function(input, output, session) {
@@ -192,17 +101,13 @@ productsAuditServer <- function(id) {
         input$classified_wb
       })
       
-      take_classified_wb <- reactive({
-        userFile2()$datapath |> openxlsx::read.xlsx() 
-      })
-      
       output$orion_import <- downloadHandler(
         
         filename = paste0("Orion Product Local Update Import - ", format(Sys.Date(), "%Y.%m.%d"), ".xlsx"),
         
         content = function(file) {
           openxlsx::write.xlsx(
-            x = userFile2()$datapath |> create_orion_import(), 
+            x = userFile2()$datapath |> kdot::orion_product_import(), 
             file
           )
         }
@@ -212,7 +117,6 @@ productsAuditServer <- function(id) {
       create_ops_update <- function(x,y,z) {
         
         framework <- readr::read_csv("MA Product Classification Framework.csv")
-        
         
         upload <- x |> create_orion_import()
         sleeved_products <- y |> openxlsx::read.xlsx()
@@ -273,8 +177,6 @@ productsAuditServer <- function(id) {
           
         }
       )
-      
     }
   )
-  
 }
