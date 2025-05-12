@@ -17,7 +17,7 @@ productsAuditUI <- function(id) {
              # Step 1
              h3("Step 1: Create classification workbook"),
              
-             "Upload the Orion Local Products export. File should be XLSX.",
+             "Upload the Orion Local Products export. File should be a CSV.",
              shiny::fileInput(
                inputId  = ns("orion_export"), 
                label    = NULL,
@@ -74,6 +74,178 @@ productsAuditUI <- function(id) {
 
 productsAuditServer <- function(id) {
   
+  ## Create workbook----
+  create_classification_wb <- function(all_local) {
+    
+    `Auto Assigned` <- AUM <- CUSIP <- `Product Sub Type Name` <- n <- NULL
+    
+    unreviewed <- all_local |> dplyr::filter(`Auto Assigned`)
+    
+    unreviewed_aum <- unreviewed |> dplyr::filter(AUM != 0)
+    
+    # Remove CUSIPs with underscore, dash
+    unreviewed_aum <- unreviewed_aum |>
+      dplyr::filter(!stringr::str_detect(CUSIP, "_")) |>
+      dplyr::filter(!stringr::str_detect(CUSIP, "-"))
+    
+    dat <- unreviewed_aum
+    
+    dat <- dat |>
+      dplyr::mutate(
+        `Product Sub Type Name` = `Product Sub Type Name` |> stringr::str_remove_all("/"),
+        `Assigned Asset Class`  = NA)
+    
+    keys_n <- dat |>
+      dplyr::group_by(`Product Sub Type Name`) |>
+      dplyr::summarise(n = dplyr::n()) |>
+      dplyr::arrange(dplyr::desc(n)) |>
+      dplyr::mutate(
+        `Product Sub Type Name` = `Product Sub Type Name` |>
+          stringr::str_replace_na()
+      )
+    
+    dat <- dat |> dplyr::group_by(`Product Sub Type Name`)
+    keys <- dplyr::group_keys(dat) |> dplyr::pull() |> stringr::str_replace_na()
+    
+    dat <- dat |> dplyr::group_split()
+    dat <- dat |> purrr::map(as.data.frame)
+    names(dat) <- keys
+    
+    wb <- openxlsx::createWorkbook()
+    
+    for(i in 1:length(dat)) {
+      openxlsx::addWorksheet(wb, names(dat)[i])
+      openxlsx::writeDataTable(wb, names(dat)[i], dat[[i]])
+    }
+    
+    # Add asset classes
+    framework <- readr::read_csv("MA Product Classification Framework.csv")
+    
+    openxlsx::addWorksheet(wb, "Asset Classes", visible = FALSE)
+    openxlsx::writeData(wb, "Asset Classes", x = framework)
+    
+    add_classes <- function(x){
+      
+      openxlsx::dataValidation(
+        wb    = wb,
+        sheet = x,
+        cols  = 13,
+        rows  = 2:(keys_n$n[i]+1),
+        type  = "list",
+        value = paste0("'Asset Classes'!$D$2:$D$", (nrow(framework)+1)))
+      
+      openxlsx::addStyle(
+        wb    = wb,
+        sheet = x,
+        style = openxlsx::createStyle(fgFill = "#C5D9F1"),
+        cols  = 13,
+        rows  = 2:(keys_n$n[i]+1))
+      
+    }
+    
+    for(i in 1:length(keys)){
+      add_classes(keys_n$`Product Sub Type Name`[i])
+    }
+    
+    return(wb)
+    
+    
+  }
+  
+  
+  create_orion_import <- function(sheet_with_assignments) {
+    
+    framework <- readr::read_csv("MA Product Classification Framework.csv")
+    
+    sheet_names <- openxlsx::getSheetNames(sheet_with_assignments)
+    bad_names   <- c("__FDSCACHE__","Asset Classes")
+    sheet_names <- sheet_names[!sheet_names %in% bad_names]
+    
+    print("go")
+    
+    get_assignments <- function(sheet_name){
+      
+      print(sheet_name)
+      
+      dat <- openxlsx::read.xlsx(
+        xlsxFile  = sheet_with_assignments,
+        sheet     = sheet_name,
+        sep.names = " ") |>
+        dplyr::select(`Product ID`, CUSIP, `Assigned Asset Class`) |>
+        dplyr::mutate(`Assigned Asset Class` = as.character(`Assigned Asset Class`))
+      
+      return(dat)
+      
+    }
+    
+    upload <- sheet_names |> purrr::map_df(get_assignments)
+    
+    upload <- upload |>
+      dplyr::filter(!is.na(`Assigned Asset Class`)) |>
+      dplyr::mutate(`Asset Class` = `Assigned Asset Class`) |>
+      dplyr::select(-`Assigned Asset Class`)
+    
+    upload <- dplyr::left_join(
+      x  = upload,
+      y  = framework,
+      by = "Asset Class")
+    
+    upload <- upload |>
+      dplyr::select(`Product ID`, `Risk Category ID`, `Asset Class ID`)
+    
+    upload <- upload |>  
+      dplyr::mutate(
+        `Product Name Override`  = NA,
+        Color                    = NA,
+        `Is Auto Assigned`       = FALSE,
+        `S&P Bond Rating`        = NA,
+        `Moody Bond Rating`      = NA,
+        `Product Status`         = NA,
+        `Is Disabled`            = NA,
+        `Is Custodial Cash`      = NA,
+        `Is Managed`             = NA,
+        `Use Global Tax Setting` = NA,
+        `Federally Taxable`      = NA,
+        `State Taxable`          = NA,
+        `Annual Income Rate`     = NA,
+        `ADV Asset Category`     = NA,
+        `Is ADV Reportable`      = NA,
+        `Is 13F Reportable`      = NA,
+        `Has Fees`               = NA)
+    
+    upload <- upload |>
+      dplyr::select(
+        `Product ID`,
+        `Product Name Override`,
+        `Asset Class ID`,
+        `Risk Category ID`,
+        `Color`,
+        `Is Auto Assigned`,
+        `S&P Bond Rating`,
+        `Moody Bond Rating`,
+        `Product Status`,
+        `Is Disabled`,
+        `Is Custodial Cash`,
+        `Is Managed`,
+        `Use Global Tax Setting`,
+        `Federally Taxable`,
+        `State Taxable`,
+        `Annual Income Rate`,
+        `ADV Asset Category`,
+        `Is ADV Reportable`,
+        `Is 13F Reportable`,
+        `Has Fees`)
+    
+    return(upload)
+    
+    
+  }
+  
+  
+  
+  
+  
+  
   shiny::moduleServer(
     id,
     
@@ -92,10 +264,11 @@ productsAuditServer <- function(id) {
       
       output$class_wb <- downloadHandler(
         
-        filename = "foo.xlsx",
+        filename = paste0("Orion Product Classifications - ", format(Sys.Date(), "%Y.%m.%d"), ".xlsx"),
         
         content = function(file) {
-          openxlsx::write.xlsx(x = take_export(), file)
+          openxlsx::saveWorkbook(wb = take_export() |> create_classification_wb(), 
+                               file)
           
         }
       )
@@ -113,15 +286,57 @@ productsAuditServer <- function(id) {
       
       output$orion_import <- downloadHandler(
         
-        filename = "ABC123.csv",
+        filename = paste0("Orion Product Local Update Import - ", format(Sys.Date(), "%Y.%m.%d"), ".xlsx"),
         
         content = function(file) {
-          readr::write_csv(x = take_classified_wb(), file)
-          
+          openxlsx::write.xlsx(
+            x = userFile2()$datapath |> create_orion_import(), 
+            file
+          )
         }
       )
       
       # Ops update
+      
+      create_ops_update <- function(x,y,z) {
+        
+        framework <- readr::read_csv("MA Product Classification Framework.csv")
+        
+        
+        upload <- x |> create_orion_import()
+        sleeved_products <- y |> openxlsx::read.xlsx()
+        all_local <- z |> readr::read_csv()
+        
+        port_ops <- dplyr::left_join(
+          x  = upload |> dplyr::select(`Product ID`, `Risk Category ID`),
+          y  = all_local |> dplyr::select(`Product ID`, Ticker, CUSIP, `Risk Category Name`),
+          by = "Product ID")
+        
+        port_ops <- port_ops |>
+          dplyr::mutate(`Previous Risk Category` = `Risk Category Name`) |>
+          dplyr::select(-`Risk Category Name`)
+        
+        port_ops <- dplyr::left_join(
+          x = port_ops,
+          y = framework |> dplyr::select(`Risk Category ID`, `Risk Category`) |> dplyr::distinct(),
+          by = "Risk Category ID")
+        
+        port_ops <- port_ops |>
+          dplyr::mutate(`New Risk Category` = `Risk Category`) |>
+          dplyr::select(-`Risk Category`, -`Risk Category ID`)
+        
+        port_ops <- port_ops |> dplyr::filter(`New Risk Category` != `Previous Risk Category`)
+        
+        port_ops <- port_ops |>
+          dplyr::filter(CUSIP %in% sleeved_products$CUSIP)
+        
+        return(port_ops)
+      }
+      
+      
+      
+      
+      
       userFile3 <- reactive({
         # If no file is selected, don't do anything
         validate(need(input$products_held, message = FALSE))
@@ -134,10 +349,12 @@ productsAuditServer <- function(id) {
       
       output$ops_update <- downloadHandler(
         
-        filename = "Ops Update.xlsx",
+        filename = paste0("Updated Risk Categories - ", format(Sys.Date(), "%Y.%m.%d"), ".xlsx"),
         
         content = function(file) {
-          openxlsx::write.xlsx(x = list(take_classified_wb(), read_held()), file)
+          openxlsx::write.xlsx(
+            x = create_ops_update(userFile2()$datapath, userFile3()$datapath, userFile()$datapath), 
+            file)
           
         }
       )

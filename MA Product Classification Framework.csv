@@ -1,0 +1,90 @@
+﻿Asset Category,Risk Category,Risk Category ID,Asset Class,Asset Class ID
+Equity,Conservative Allocation,32,Retirement Income,2182
+Equity,Conservative Allocation,32,Allocation--0% to 15% Equity,2181
+Equity,Conservative Allocation,32,Allocation--15% to 30% Equity,2180
+Equity,Conservative Allocation,32,Target-Date 2000-2010,2183
+Equity,Conservative Allocation,32,Target-Date 2015,2184
+Equity,Conservative Allocation,32,Target-Date 2020,2185
+Equity,Conservative Allocation,32,Target-Date 2025,2186
+Equity,Conservative Allocation,32,Target-Date 2030,2187
+Equity,Moderate Allocation,31,Target-Date 2035,2188
+Equity,Moderate Allocation,31,Allocation--30% to 50% Equity,2179
+Equity,Moderate Allocation,31,Target-Date 2040,2189
+Equity,Moderate Allocation,31,Allocation--50% to 70% Equity,2178
+Equity,Moderate Allocation,31,Target-Date 2045,2190
+Equity,Aggressive Allocation,30,Tactical Allocation,2195
+Equity,Aggressive Allocation,30,Target-Date 2050,2191
+Equity,Aggressive Allocation,30,Target-Date 2055,2192
+Equity,Aggressive Allocation,30,Target-Date 2060,2193
+Equity,Aggressive Allocation,30,Target-Date 2065+,2194
+Equity,Aggressive Allocation,30,Allocation--70% to 85% Equity,2177
+Equity,Aggressive Allocation,30,Allocation--85%+ Equity,2176
+Equity,US Large Cap Equity,27,US Preferred Stock,2151
+Equity,US Large Cap Equity,27,US Large Cap Core,2143
+Equity,US Large Cap Equity,27,US Large Cap Value,2149
+Equity,US Large Cap Equity,27,US Large Cap Dividend,2145
+Equity,US Large Cap Equity,27,US Large Cap Dividend Yield,2150
+Equity,US Large Cap Equity,27,US Large Cap Quality,2148
+Equity,US Large Cap Equity,27,US Large Cap Low Volatility,2146
+Equity,US Large Cap Equity,27,US Large Cap Multifactor,2144
+Equity,US Large Cap Equity,27,US Large Cap Momentum,2234
+Equity,US Large Cap Equity,27,US Real Estate,2153
+Equity,US Large Cap Equity,27,US Sector Equity,2152
+Equity,US Mid Cap Equity,43,US Mid Cap Core,2154
+Equity,US Mid Cap Equity,43,US Mid Cap Dividend Yield,2155
+Equity,US Small Cap Equity,44,US Small Cap Core,2156
+Equity,US Small Cap Equity,44,US Small Cap Dividend Yield,2158
+Equity,US Small Cap Equity,44,US Small Cap Multifactor,2157
+Equity,Global Equity,29,Global Preferred Stock,2173
+Equity,Global Equity,29,Global Equity,2224
+Equity,Global Equity,29,Global Real Estate,2175
+Equity,Global Equity,29,Global Sector Equity,2174
+Equity,Int'l Developed Equity,28,Int'l Developed Preferred Stock,2167
+Equity,Int'l Developed Equity,28,Int'l Developed Core,2159
+Equity,Int'l Developed Equity,28,Int'l Developed Dividend Yield,2166
+Equity,Int'l Developed Equity,28,Int'l Developed Value,2164
+Equity,Int'l Developed Equity,28,Int'l Developed Quality,2163
+Equity,Int'l Developed Equity,28,Int'l Developed Low Volatility,2161
+Equity,Int'l Developed Equity,28,Int'l Developed Multifactor,2160
+Equity,Int'l Developed Equity,28,Int'l Developed Momentum,2162
+Equity,Int'l Developed Equity,28,Int'l Developed Small/Mid Cap,2165
+Equity,Int'l Developed Equity,28,Int'l Developed Real Estate,2169
+Equity,Int'l Developed Equity,28,Int'l Developed Sector Equity,2168
+Equity,Emerging Markets Equity,20,Emerging Markets Core,2170
+Equity,Emerging Markets Equity,20,Emerging Markets Dividend Yield,2172
+Equity,Emerging Markets Equity,20,Emerging Markets Multifactor,2171
+Equity,Other,34,Other,2220
+Alternative,Annuity,37,Annuity,2208
+Alternative,Annuity,37,Fixed Annuity,2233
+Alternative,Annuity,37,Fixed Indexed Annuity,2207
+Alternative,Private Markets,35,Private Infrastructure,2198
+Alternative,Private Markets,35,Private Real Assets,2199
+Alternative,Private Markets,35,Private Real Estate,2196
+Alternative,Private Markets,35,Private Credit,2197
+Alternative,Private Markets,35,Private Equity,2228
+Alternative,Private Markets,35,Venture Capital,2225
+Alternative,Other Alternatives,36,Alternative,2205
+Alternative,Other Alternatives,36,Commodities,2201
+Alternative,Other Alternatives,36,Options-Trading,2204
+Alternative,Other Alternatives,36,Managed Futures,2202
+Alternative,Other Alternatives,36,Hedge Funds,2200
+Alternative,Other Alternatives,36,Multi-Strategy,2203
+Alternative,Other Alternatives,36,Cryptocurrency,2206
+Fixed Income,Municipal Bond,41,National Muni Bond,2215
+Fixed Income,Municipal Bond,41,State-Specific Muni Bond,2216
+Fixed Income,US Taxable Bond,40,Treasuries,2212
+Fixed Income,US Taxable Bond,40,Inflation-Protected Bond,2223
+Fixed Income,US Taxable Bond,40,Short-Term Bond,2226
+Fixed Income,US Taxable Bond,40,Intermediate Core Bond,2227
+Fixed Income,US Taxable Bond,40,Corporate Bond,2231
+Fixed Income,US Taxable Bond,40,Bank Loan,2230
+Fixed Income,US Taxable Bond,40,Non-Traditional Bond,2213
+Fixed Income,High Yield Municipal Bond,47,High Yield Municipal Bond,2250
+Fixed Income,US High Yield Taxable Bond,48,High Yield Taxable Bond,2214
+Fixed Income,International Taxable Bond,42,International Bond,2217
+Fixed Income,International Taxable Bond,42,International Bond - USD Hedged,2218
+Fixed Income,International Taxable Bond,42,Emerging Markets Bond,2229
+Cash,Cash,39,Cash,2142
+Cash,Cash Equivalents,38,Certificate of Deposit,2232
+Cash,Cash Equivalents,38,Money Market Tax-Free,2210
+Cash,Cash Equivalents,38,Money Market Taxable,2209

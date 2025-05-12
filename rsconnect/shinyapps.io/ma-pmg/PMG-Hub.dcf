@@ -5,7 +5,7 @@ account: ma-pmg
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 14648338
-bundleId: 10241689
+bundleId: 10266707
 url: https://ma-pmg.shinyapps.io/PMG-Hub/
 version: 1
 asMultiple: FALSE
