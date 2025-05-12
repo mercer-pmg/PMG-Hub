@@ -84,7 +84,7 @@ productsAuditServer <- function(id) {
       
       output$class_wb <- downloadHandler(
         
-        filename = paste0("Orion Product Classifications - ", format(Sys.Date(), "%Y.%m.%d"), ".xlsx"),
+        filename = kdot::dated_filename("Orion Product Classifications", "xlsx"),
         
         content = function(file) {
           openxlsx::saveWorkbook(
@@ -103,8 +103,8 @@ productsAuditServer <- function(id) {
       
       output$orion_import <- downloadHandler(
         
-        filename = paste0("Orion Product Local Update Import - ", format(Sys.Date(), "%Y.%m.%d"), ".xlsx"),
-        
+        filename = kdot::dated_filename("Orion Product Local Update Import", "xlsx"),
+
         content = function(file) {
           openxlsx::write.xlsx(
             x = userFile2()$datapath |> kdot::orion_product_import(), 
@@ -118,7 +118,7 @@ productsAuditServer <- function(id) {
         
         framework <- readr::read_csv("MA Product Classification Framework.csv")
         
-        upload <- x |> create_orion_import()
+        upload <- x |> kdot::orion_product_import()
         sleeved_products <- y |> openxlsx::read.xlsx()
         all_local <- z |> readr::read_csv()
         
@@ -168,8 +168,8 @@ productsAuditServer <- function(id) {
       
       output$ops_update <- downloadHandler(
         
-        filename = paste0("Updated Risk Categories - ", format(Sys.Date(), "%Y.%m.%d"), ".xlsx"),
-        
+        filename = kdot::dated_filename("Updated Risk Categories", "xlsx"),
+
         content = function(file) {
           openxlsx::write.xlsx(
             x = create_ops_update(userFile2()$datapath, userFile3()$datapath, userFile4()$datapath), 
