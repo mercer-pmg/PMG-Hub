@@ -13,9 +13,8 @@ productsAuditUI <- function(id) {
     shiny::fluidPage(
       column(width = 6, 
              
-             
              # Step 1
-             h3("Step 1: Create classification workbook"),
+             h3("Step 1: Create product classification workbook"),
              
              "Upload the Orion Local Products export. File should be a CSV.",
              shiny::fileInput(
@@ -23,18 +22,21 @@ productsAuditUI <- function(id) {
                label    = NULL,
                multiple = FALSE),
              
-             "Download the classification workbook.",
-             br(),
-             shiny::downloadButton(ns("class_wb")),
+             shiny::downloadButton(
+               outputId = ns("class_wb"),
+               label    = "Download Classification Workbook")
+      ),
+      
+      column(width = 6,     
              
-             br(),
-             br(),
-             br(),
-             br(),
-             
-
              # Step 2
-             h3("Step 2: Create Orion Product Local Update import."),
+             h3("Step 2: Create Orion import and update for Ops"),
+             
+             "Upload the Orion Local Products export. File should be a CSV.",
+             shiny::fileInput(
+               inputId  = ns("orion_export2"), 
+               label    = NULL,
+               multiple = FALSE),
              
              "Upload the classification workbook.",
              shiny::fileInput(
@@ -42,29 +44,19 @@ productsAuditUI <- function(id) {
                label    = NULL,
                multiple = FALSE),
              
-             "Download Orion Product Local Update import.",
-             br(),
-             shiny::downloadButton(ns("orion_import")),
-             
-             br(),
-             br(),
-             br(),
-             br(),
-             
-
-             # Step 3
-             h3("Step 3: Create table of updated risk categories for Ops."),
-             
              "Upload products held in sleeved accounts. Orion query 39768. Broker Dealer ID(s) = 0. Direct download as XLSX.",
              shiny::fileInput(
                inputId  = ns("products_held"), 
                label    = NULL,
                multiple = FALSE),
              
-             "Download the relevant risk category updates for Investment Operations.", 
-             br(),
-             shiny::downloadButton(ns("ops_update"))
+             shiny::downloadButton(
+               outputId = ns("orion_import"),
+               label    = "Download Orion Import"),
              
+             shiny::downloadButton(
+               outputId = ns("ops_update"),
+               label    = "Download Ops Update")
       )
     )
   )
@@ -77,10 +69,8 @@ productsAuditServer <- function(id) {
   ## Create workbook----
   create_classification_wb <- function(all_local) {
     
-    `Auto Assigned` <- AUM <- CUSIP <- `Product Sub Type Name` <- n <- NULL
-    
+    reviewed   <- all_local |> dplyr::filter(!`Auto Assigned`) |> dplyr::mutate(`Assigned Asset Class` = NA)
     unreviewed <- all_local |> dplyr::filter(`Auto Assigned`)
-    
     unreviewed_aum <- unreviewed |> dplyr::filter(AUM != 0)
     
     # Remove CUSIPs with underscore, dash
@@ -111,12 +101,21 @@ productsAuditServer <- function(id) {
     dat <- dat |> purrr::map(as.data.frame)
     names(dat) <- keys
     
+    dat[["Mutual Fund"]] <- dat[["Mutual Fund"]] |>
+      dplyr::mutate(Segment = NA)
+    
     wb <- openxlsx::createWorkbook()
+    
+    openxlsx::addWorksheet(wb, "Status")
+    openxlsx::writeData(wb, "Status", keys_n)
     
     for(i in 1:length(dat)) {
       openxlsx::addWorksheet(wb, names(dat)[i])
       openxlsx::writeDataTable(wb, names(dat)[i], dat[[i]])
     }
+    
+    openxlsx::addWorksheet(wb, "Classified")
+    openxlsx::writeDataTable(wb, "Classified", reviewed)
     
     # Add asset classes
     framework <- readr::read_csv("MA Product Classification Framework.csv")
@@ -147,6 +146,33 @@ productsAuditServer <- function(id) {
       add_classes(keys_n$`Product Sub Type Name`[i])
     }
     
+    openxlsx::dataValidation(
+      wb = wb,
+      sheet = "Classified",
+      cols = 13,
+      rows = 2:(nrow(reviewed)+1),
+      type = "list",
+      value = paste0("'Asset Classes'!$D$2:$D$", (nrow(framework)+1))
+    )
+    
+    openxlsx::addStyle(
+      wb    = wb,
+      sheet = "Classified",
+      style = openxlsx::createStyle(fgFill = "#C5D9F1"),
+      cols  = 13,
+      rows  = 2:(nrow(reviewed)+1)
+    )
+    
+    
+    # Add FactSet functions
+    openxlsx::writeFormula(
+      wb       = wb,
+      sheet    = "Mutual Fund",
+      x        = paste0('FDS(D', 2:(nrow(dat[["Mutual Fund"]])+1),',"FFD_SEG")'),
+      startRow = 2,
+      startCol = 14
+    )
+    
     return(wb)
     
     
@@ -158,10 +184,8 @@ productsAuditServer <- function(id) {
     framework <- readr::read_csv("MA Product Classification Framework.csv")
     
     sheet_names <- openxlsx::getSheetNames(sheet_with_assignments)
-    bad_names   <- c("__FDSCACHE__","Asset Classes")
+    bad_names   <- c("__FDSCACHE__","Asset Classes", "Status")
     sheet_names <- sheet_names[!sheet_names %in% bad_names]
-    
-    print("go")
     
     get_assignments <- function(sheet_name){
       
@@ -268,7 +292,7 @@ productsAuditServer <- function(id) {
         
         content = function(file) {
           openxlsx::saveWorkbook(wb = take_export() |> create_classification_wb(), 
-                               file)
+                                 file)
           
         }
       )
@@ -297,7 +321,6 @@ productsAuditServer <- function(id) {
       )
       
       # Ops update
-      
       create_ops_update <- function(x,y,z) {
         
         framework <- readr::read_csv("MA Product Classification Framework.csv")
@@ -334,7 +357,11 @@ productsAuditServer <- function(id) {
       }
       
       
-      
+      userFile4 <- reactive({
+        # If no file is selected, don't do anything
+        validate(need(input$orion_export2, message = FALSE))
+        input$orion_export2
+      })
       
       
       userFile3 <- reactive({
@@ -353,7 +380,7 @@ productsAuditServer <- function(id) {
         
         content = function(file) {
           openxlsx::write.xlsx(
-            x = create_ops_update(userFile2()$datapath, userFile3()$datapath, userFile()$datapath), 
+            x = create_ops_update(userFile2()$datapath, userFile3()$datapath, userFile4()$datapath), 
             file)
           
         }
