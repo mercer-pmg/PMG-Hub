@@ -10,7 +10,7 @@ orion_platform <- aws.s3::get_object(
   readr::read_csv(show_col_types = FALSE)
 
 
-
+# UI----
 header <- 
   shinydashboard::dashboardHeader(
     title = "PMG Apps",
@@ -77,17 +77,18 @@ body <-
 
 ui     <- shinydashboard::dashboardPage(header, sidebar, body)
 
+# Server----
 server <- function(input, output) {
   
   options(shiny.maxRequestSize=50*1024^2)
   
-  # Suite Builder
+  ## Suite Builder----
   suite_builderServer("suite_builder", platform = orion_platform)
   
-  # Blended Strategy Bundler
+  ## Blended Strategy Bundler----
   bundle <- bs_bundlerServer("blended_bundler")
   
-  # Orion Products Audit
+  ## Orion Products Audit----
   productsAuditServer("products_audit")
   
 }
