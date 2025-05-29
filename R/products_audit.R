@@ -140,7 +140,9 @@ productsAuditServer <- function(id) {
           dplyr::mutate(`New Risk Category` = `Risk Category`) |>
           dplyr::select(-`Risk Category`, -`Risk Category ID`)
         
-        port_ops <- port_ops |> dplyr::filter(`New Risk Category` != `Previous Risk Category`)
+        port_ops <- port_ops |> 
+          dplyr::mutate(`Previous Risk Category` = `Previous Risk Category` |> stringr::str_replace_na()) |>
+          dplyr::filter(`New Risk Category` != `Previous Risk Category`)
         
         port_ops <- port_ops |>
           dplyr::filter(CUSIP %in% sleeved_products$CUSIP)
