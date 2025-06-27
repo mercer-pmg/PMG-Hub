@@ -40,6 +40,28 @@ body {
   font-family: 'Merriweather';
 }
 
+.irs--shiny .irs-from, .irs--shiny .irs-to, .irs--shiny .irs-single {
+    color: #fff;
+    text-shadow: none;
+    padding: 1px 3px;
+    background-color: #820361;
+    border-radius: 3px;
+    font-size: 11px;
+    line-height: 1.333;
+  
+}
+
+.irs--shiny .irs-bar {
+    top: 25px;
+    height: 8px;
+    border-top: 1px solid #820361;
+    border-bottom: 1px solid #820361;
+    background: #820361;
+    cursor: s-resize;
+    z-index: 2;
+}
+
+
 /* active sidebar menu item */
 .skin-blue .main-sidebar .sidebar .sidebar-menu a:hover{
         background-color: white;
