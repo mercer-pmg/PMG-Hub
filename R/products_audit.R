@@ -87,6 +87,7 @@ productsAuditServer <- function(id) {
         filename = kdot::dated_filename("Orion Product Classifications", "xlsx"),
         
         content = function(file) {
+          print("fire")
           openxlsx::saveWorkbook(
             wb = take_export() |> kdot::create_classification_wb(), 
             file)
