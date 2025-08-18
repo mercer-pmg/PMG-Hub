@@ -194,7 +194,7 @@ ui     <- shinydashboard::dashboardPage(header, sidebar, body)
 # Server----
 server <- function(input, output, platform = orion_platform) {
   
-  options(shiny.maxRequestSize=50*1024^2)
+  options(shiny.maxRequestSize=100*1024^2)
   
   ## Aspen Investing Menu----
   aimServer("aim", platform = orion_platform)
