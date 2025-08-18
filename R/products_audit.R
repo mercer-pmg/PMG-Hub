@@ -102,13 +102,29 @@ productsAuditServer <- function(id) {
         input$classified_wb
       })
       
+      orion_import_xlsx <- reactive({
+        userFile2()$datapath |> kdot::orion_product_import()
+      })
+      
+      # output$orion_import <- downloadHandler(
+      #   
+      #   filename = kdot::dated_filename("Orion Product Local Update Import", "xlsx"),
+      # 
+      #   content = function(file) {
+      #     openxlsx::write.xlsx(
+      #       x = userFile2()$datapath |> kdot::orion_product_import(), 
+      #       file
+      #     )
+      #   }
+      # )
+      
       output$orion_import <- downloadHandler(
         
         filename = kdot::dated_filename("Orion Product Local Update Import", "xlsx"),
-
+        
         content = function(file) {
           openxlsx::write.xlsx(
-            x = userFile2()$datapath |> kdot::orion_product_import(), 
+            x = orion_import_xlsx(), 
             file
           )
         }
@@ -119,9 +135,13 @@ productsAuditServer <- function(id) {
         
         framework <- readr::read_csv("MA Product Classification Framework.csv")
         
-        upload <- x |> kdot::orion_product_import()
-        sleeved_products <- y |> openxlsx::read.xlsx()
-        all_local <- z |> readr::read_csv()
+        # upload           <- x |> kdot::orion_product_import()
+        # sleeved_products <- y |> openxlsx::read.xlsx()
+        # all_local        <- z |> readr::read_csv()
+        
+        upload           <- x
+        sleeved_products <- y 
+        all_local        <- z 
         
         port_ops <- dplyr::left_join(
           x  = upload |> dplyr::select(`Product ID`, `Risk Category ID`),
@@ -148,6 +168,8 @@ productsAuditServer <- function(id) {
         port_ops <- port_ops |>
           dplyr::filter(CUSIP %in% sleeved_products$CUSIP)
         
+        print("fire")
+        
         return(port_ops)
       }
       
@@ -156,6 +178,10 @@ productsAuditServer <- function(id) {
         # If no file is selected, don't do anything
         validate(need(input$orion_export2, message = FALSE))
         input$orion_export2
+      })
+      
+      all_local <- reactive({
+        userFile4()$datapath |> readr::read_csv()
       })
       
       
@@ -173,12 +199,20 @@ productsAuditServer <- function(id) {
         
         filename = kdot::dated_filename("Updated Risk Categories", "xlsx"),
 
+        # content = function(file) {
+        #   openxlsx::write.xlsx(
+        #     x = create_ops_update(userFile2()$datapath, userFile3()$datapath, userFile4()$datapath), 
+        #     file)
+        #   
+        # }
+        
         content = function(file) {
           openxlsx::write.xlsx(
-            x = create_ops_update(userFile2()$datapath, userFile3()$datapath, userFile4()$datapath), 
+            x = create_ops_update(orion_import_xlsx(), read_held(), all_local()), 
             file)
           
         }
+        
       )
     }
   )
