@@ -51,16 +51,16 @@ aimUI <- function(id, platform, categories, types, models){
                      choiceValues = c(TRUE, FALSE),
                      inline       = TRUE),
                    
-                   shiny::radioButtons(
-                     inputId  = ns("model_search"),
-                     label    = "Search by Model",
-                     choices  = c("Any Model", "All Models"),
-                     selected = "Any Model",
-                     inline   = TRUE),
+                   # shiny::radioButtons(
+                   #   inputId  = ns("model_search"),
+                   #   label    = "Search by Model",
+                   #   choices  = c("Any Model", "All Models"),
+                   #   selected = "Any Model",
+                   #   inline   = TRUE),
                    
                    shiny::selectInput(
                      inputId   = ns("models"),
-                     label     = NULL,
+                     label     = "Search by model",
                      choices   = model_list,
                      multiple  = TRUE,
                      selectize = TRUE)
@@ -234,23 +234,23 @@ aimServer <- function(id, platform) {
         dplyr::filter(tax_managed %in% tax_mgmt()) |>
         dplyr::filter(model_agg %in% models())
       
-      if(input$model_search == "All Models") {
-        
-        models_n <- length(models())
-        
-        
-        xx <- platform |>
-          dplyr::select(strategy, model_agg) |>
-          dplyr::group_by(strategy) |>
-          dplyr::summarise(n = dplyr::n()) |>
-          dplyr::filter(n == models_n) |>
-          dplyr::pull(strategy)
-        
-        df <- df |> 
-          dplyr::filter(strategy %in% xx)
-        
-        
-      }
+      # if(input$model_search == "All Models") {
+      #   
+      #   models_n <- length(models())
+      #   
+      #   
+      #   xx <- platform |>
+      #     dplyr::select(strategy, model_agg) |>
+      #     dplyr::group_by(strategy) |>
+      #     dplyr::summarise(n = dplyr::n()) |>
+      #     dplyr::filter(n == models_n) |>
+      #     dplyr::pull(strategy)
+      #   
+      #   df <- df |> 
+      #     dplyr::filter(strategy %in% xx)
+      #   
+      #   
+      # }
       
       df <- df |>
         dplyr::select(strategy) |>
