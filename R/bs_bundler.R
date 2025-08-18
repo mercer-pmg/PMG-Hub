@@ -38,23 +38,64 @@ bs_bundlerServer <- function(id){
       })
       
       bundle <- reactive({
-        userFile()$datapath |> 
+        
+        dat <- userFile()$datapath |> 
           purrr::map(readr::read_csv, show_col_types = FALSE) |> 
           dplyr::bind_rows()
-      })
-      
-      output$download <- downloadHandler(
         
-        filename = "blended_strategy_bundle.xlsx",
-        
-        content = function(file) {
-          openxlsx::write.xlsx(x = bundle(), file)
+        test_distinct <- function(x, df = dat){
           
+          y <- df |> dplyr::filter(Name == x) |> dplyr::filter(`Target Allocation` != 0)
+          n <- y |> nrow()
+          
+          matches <- df |> dplyr::filter(Name != x) |> dplyr::select(Name) |> dplyr::distinct()
+          
+          for(i in 1:n){
+            foo <- df |>
+              dplyr::filter(Modelagg == y$Modelagg[i] & `Target Allocation` == y$`Target Allocation`[i]) |>
+              dplyr::pull(Name)
+            
+            matches <- matches |> dplyr::filter(Name %in% foo)
+            
+          }
+          
+          if(nrow(matches) > 0){
+            return(FALSE)
+          } else {
+            return(TRUE)
+          }
         }
-      )
-      
-      return(bundle)
-      
+        
+        distinct_strategies <- dat |> dplyr::select(Name) |> dplyr::distinct()
+        
+        distinct_strategies <- distinct_strategies |>
+          dplyr::rowwise() |>
+          dplyr::mutate(is_distinct = Name |> test_distinct()) |>
+          dplyr::filter(!is_distinct)
+        
+        if(nrow(distinct_strategies) > 0){
+          
+          distinct_strategies
+               
+        } else {
+          
+          dat
+        }
+        
+      })
+          
+          output$download <- downloadHandler(
+            
+            filename = kdot::dated_filename("Blended Strategy Bundle", "xlsx"),
+            
+            content = function(file) {
+              openxlsx::write.xlsx(x = bundle(), file)
+              
+            }
+          )
+          
+          return(bundle)
+          
     }
-  )
+      )
 }
