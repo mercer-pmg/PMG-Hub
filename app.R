@@ -94,6 +94,31 @@ orion_platform <- orion_platform |>
     
   )
 
+orion_platform_V2 <- orion_platform |>
+  dplyr::mutate(
+    category = dplyr::case_match(
+      type,
+      "Blended Strategy" ~ "Blended",
+      c("Market Series", "Multifactor Series", "Income Series") ~ "Risk-Based",
+      c("Equity Strategies", "Fixed Income Strategies", "Cash Strategies", "Alternative Strategies", "Special Situation Strategies") ~ "Asset Class",
+      .default = NA_character_
+    ),
+    model_group = dplyr::case_when(
+      stringr::str_detect(model_agg, "MA Market") ~ "Market Series",
+      stringr::str_detect(model_agg, "MA Multifactor") ~ "Multifactor Series",
+      stringr::str_detect(model_agg, "MA Income") ~ "Income Series",
+      stringr::str_detect(model_agg, "MA Cash Mgmt") ~ "Cash Mgmt",
+      stringr::str_detect(model_agg, "Quantitative Portfolio") ~ "Quantitative Portfolios",
+      stringr::str_detect(model_agg, "MA Fixed Income") ~ "Fixed Income",
+      stringr::str_detect(model_agg, "Ladder \\(ETF\\)$") ~ "Fixed Income ETF Ladder",
+      stringr::str_detect(model_agg, "BlackRock|Nuveen|PIMCO") ~ "Third-Party Fixed Income SMA",
+      TRUE ~ "Other"
+    )
+  )
+
+# all.equal(orion_platform, orion_platform_V2) # evals to TRUE
+# TODO: remove comparison once confirmed with David to proceed with V1 or V2
+
 orion_platform <- dplyr::left_join(
   x = orion_platform,
   y = strategy_aum,
