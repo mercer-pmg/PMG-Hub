@@ -18,6 +18,11 @@ productsAuditUI <- function(id) {
           label    = NULL,
           multiple = FALSE
         ),
+        shiny::checkboxInput(
+          inputId = ns("include_predictions"),
+          label = "Include predictions",
+          value = TRUE
+        ),
         shiny::downloadButton(
           outputId = ns("class_wb"),
           label    = "Download Classification Workbook"
@@ -142,7 +147,7 @@ productsAuditServer <- function(id) {
             data <- take_export()
 
             shiny::incProgress(1 / 3, detail = "Building workbook")
-            wb <- kdot::create_classification_wb(data)
+            wb <- kdot::create_classification_wb(data, include_predictions = input$include_predictions)
 
             shiny::incProgress(1 / 3, detail = "Saving file")
             openxlsx::saveWorkbook(wb = wb, file)
