@@ -171,6 +171,7 @@ productsAuditServer <- function(id) {
 
             shiny::incProgress(1 / 2, detail = "Saving file")
             openxlsx::write.xlsx(x = data, file)
+            print(paste("Orion import:", nrow(data), "records"))
           })
         }
       )
@@ -196,6 +197,7 @@ productsAuditServer <- function(id) {
 
             shiny::incProgress(1 / 4, detail = "Saving file")
             openxlsx::write.xlsx(x = update_data, file)
+            print(paste("Risk Category output:", nrow(update_data), "records"))
 
             shiny::incProgress(1 / 4, detail = "fire 🔥")
           })
