@@ -59,7 +59,6 @@ productsAuditUI <- function(id) {
 }
 
 
-
 productsAuditServer <- function(id) {
   shiny::moduleServer(
     id,
@@ -103,7 +102,7 @@ productsAuditServer <- function(id) {
       }
 
       create_ops_update <- function(upload, sleeved_products, all_local) {
-        framework <- readr::read_csv("MA Product Classification Framework.csv")
+        framework <- readr::read_csv("MA Product Classification Framework.csv", show_col_types = FALSE)
 
         result <- upload |>
           dplyr::select(`Product ID`, `Risk Category ID`) |>
@@ -134,7 +133,7 @@ productsAuditServer <- function(id) {
       take_export <- reactive({
         validate(need(input$orion_export, message = FALSE))
         input$orion_export$datapath |>
-          readr::read_csv() |>
+          readr::read_csv(show_col_types = FALSE) |>
           transform_orion_data()
       })
 
