@@ -1,3 +1,4 @@
+# Data Set-Up----
 strategy_aum <- aws.s3::get_object(
   region = Sys.getenv("AWS_DEFAULT_REGION"),
   key    = Sys.getenv("AWS_ACCESS_KEY_ID"),
@@ -65,6 +66,10 @@ sidebar <-
       shinydashboard::menuItem(
         text    = "Orion Products Audit",
         tabName = "products_audit"
+      ),
+      shinydashboard::menuItem(
+        text    = "Orion SMA Settings",
+        tabName = "orion_sma"
       )
     )
   )
@@ -73,7 +78,6 @@ body <-
   shinydashboard::dashboardBody(
     shiny::includeCSS("www/custom.css"),
     shinydashboard::tabItems(
-
       ## Aspen Investing Menu---------------------------------------------------
       shinydashboard::tabItem(
         tabName = "aim",
@@ -102,6 +106,12 @@ body <-
       shinydashboard::tabItem(
         tabName = "products_audit",
         productsAuditUI("products_audit")
+      ),
+
+      ## Orion SMA Settings-----------------------------------------------------
+      shinydashboard::tabItem(
+        tabName = "orion_sma",
+        orionSmaUI("orion_sma")
       )
     )
   )
@@ -123,6 +133,9 @@ server <- function(input, output, platform = orion_platform) {
 
   ## Orion Products Audit----
   productsAuditServer("products_audit")
+
+  ## Orion SMA Settings----
+  orionSmaServer("orion_sma")
 }
 
 shinyApp(ui = ui, server = server)
