@@ -53,15 +53,6 @@ get_token <- function(token_input = NULL) {
   if (nzchar(env_token)) env_token else NULL
 }
 
-# Get request headers
-get_headers <- function(token) {
-  list(
-    "Authorization" = paste("Bearer", token),
-    "Accept" = "application/json",
-    "Content-Type" = "application/json"
-  )
-}
-
 # Extract asset ID from asset data
 extract_asset_id <- function(asset_data) {
   if (!is.list(asset_data)) {
@@ -97,6 +88,16 @@ extract_product_id <- function(asset_data) {
     return(as.integer(asset_data$portfolio$productId))
   }
 
+  return(NULL)
+}
+
+# Extract account number from account data
+extract_account_number <- function(account_data) {
+  if (!is.null(account_data$number)) {
+    return(account_data$number)
+  } else if (!is.null(account_data$accountNumber)) {
+    return(account_data$accountNumber)
+  }
   return(NULL)
 }
 
@@ -140,7 +141,13 @@ api_request <- function(method, endpoint, json_data = NULL, params = NULL, token
   tryCatch(
     {
       url <- paste0(BASE_URL, endpoint)
-      headers <- get_headers(token)
+
+      # Build headers inline
+      headers <- list(
+        "Authorization" = paste("Bearer", token),
+        "Accept" = "application/json",
+        "Content-Type" = "application/json"
+      )
 
       config <- httr::config(ssl_verifypeer = VERIFY_SSL)
 
@@ -179,7 +186,23 @@ api_request <- function(method, endpoint, json_data = NULL, params = NULL, token
       if (status_code %in% c(200, 201, 204)) {
         return(list(success = TRUE, response = response, status_code = status_code))
       } else {
-        error_msg <- handle_api_response(response, error_context)
+        response_text <- httr::content(response, as = "text", encoding = "UTF-8")
+        response_preview <- substr(response_text, 1, 200)
+
+        if (status_code == 400) {
+          error_msg <- paste("Validation Error - Bad Request:", error_context, "\n\nResponse:", response_preview)
+        } else if (status_code == 401) {
+          error_msg <- "Authentication Error - Invalid API token"
+        } else if (status_code == 404) {
+          error_msg <- paste("Not Found - Resource not found:", error_context, "\n\nResponse:", response_preview)
+        } else if (status_code == 405) {
+          error_msg <- paste("API Error - Method Not Allowed (405):", error_context, "\n\nResponse:", response_preview)
+        } else if (status_code == 500) {
+          error_msg <- paste("Server Error - Internal server error:", error_context, "\n\nResponse:", response_preview)
+        } else {
+          error_msg <- paste("API Error", status_code, ":", response_preview)
+        }
+
         return(list(success = FALSE, error = error_msg, status_code = status_code))
       }
     },
@@ -189,67 +212,21 @@ api_request <- function(method, endpoint, json_data = NULL, params = NULL, token
   )
 }
 
-# Handle API response errors
-handle_api_response <- function(response, error_context = "") {
-  status_code <- httr::status_code(response)
-  response_text <- httr::content(response, as = "text", encoding = "UTF-8")
-  response_preview <- substr(response_text, 1, 200)
-
-  if (status_code == 400) {
-    return(paste("Validation Error - Bad Request:", error_context, "\n\nResponse:", response_preview))
-  } else if (status_code == 401) {
-    return("Authentication Error - Invalid API token")
-  } else if (status_code == 404) {
-    return(paste("Not Found - Resource not found:", error_context, "\n\nResponse:", response_preview))
-  } else if (status_code == 405) {
-    return(paste("API Error - Method Not Allowed (405):", error_context, "\n\nResponse:", response_preview))
-  } else if (status_code == 500) {
-    return(paste("Server Error - Internal server error:", error_context, "\n\nResponse:", response_preview))
-  } else {
-    return(paste("API Error", status_code, ":", response_preview))
-  }
-}
-
-# Validate account ID
-validate_account_id <- function(account_id) {
-  if (is.null(account_id) || trimws(account_id) == "") {
-    return(FALSE)
-  }
-
-  account_id_clean <- trimws(account_id)
-  if (grepl("^[0-9]+$", account_id_clean)) {
-    return(TRUE)
-  }
-
-  return(FALSE)
-}
-
 # Validate inputs (account ID and token)
 validate_inputs <- function(account_id, token) {
   account_id <- trimws(account_id)
-  if (account_id == "" || !validate_account_id(account_id)) {
+
+  if (account_id == "" || !grepl("^[0-9]+$", account_id)) {
     return(list(valid = FALSE, error = "Please enter a valid Account ID"))
   }
+
   if (is.null(token) || token == "") {
     return(list(valid = FALSE, error = "API token not found"))
   }
+
   return(list(valid = TRUE, account_id = account_id, token = token))
 }
 
-# Append to steps history
-append_steps <- function(history, new_text, add_separator = FALSE) {
-  separator <- if (add_separator && history != "") "<br><br><hr><br>" else ""
-  paste0(history, separator, new_text)
-}
-
-# Format change message for verification
-format_change_message <- function(field_name, old_val, new_val) {
-  if (old_val != new_val) {
-    paste0("&nbsp;&nbsp;• ", field_name, ": ", old_val, " → ", new_val, "<br>")
-  } else {
-    paste0("&nbsp;&nbsp;• ", field_name, ": ", new_val, " (no change)<br>")
-  }
-}
 
 # Validate bulk CSV structure and data
 validate_bulk_csv <- function(csv_data) {
@@ -471,13 +448,7 @@ check_account_sma <- function(account_id, token) {
 
       # Extract account info
       result$account_name <- ifelse(is.null(account_data$name), "N/A", account_data$name)
-      result$account_number <- if (!is.null(account_data$number)) {
-        account_data$number
-      } else if (!is.null(account_data$accountNumber)) {
-        account_data$accountNumber
-      } else {
-        NULL
-      }
+      result$account_number <- extract_account_number(account_data)
 
       # Extract SMA values
       sma_values <- extract_sma_values(account_data)
@@ -551,14 +522,8 @@ process_single_account_product <- function(account_id, product_id, token) {
     httr::content(account_result$response, as = "text", encoding = "UTF-8")
   )
 
-  # Extract account number using direct access (matching populate_settings pattern)
-  account_number <- if (!is.null(account_data$number)) {
-    account_data$number
-  } else if (!is.null(account_data$accountNumber)) {
-    account_data$accountNumber
-  } else {
-    NULL
-  }
+  # Extract account number
+  account_number <- extract_account_number(account_data)
 
   if (is.null(account_number)) {
     result$status <- "Error"
@@ -1039,7 +1004,8 @@ orionSmaServer <- function(id) {
         }
 
         account_name <- ifelse(is.null(values$account_data$name), "N/A", values$account_data$name)
-        account_number <- ifelse(is.null(values$account_data$number), "N/A", values$account_data$number)
+        account_number_raw <- extract_account_number(values$account_data)
+        account_number <- ifelse(is.null(account_number_raw), "N/A", account_number_raw)
 
         sma_values <- extract_sma_values(values$account_data)
 
@@ -1287,7 +1253,7 @@ orionSmaServer <- function(id) {
           return()
         }
 
-        account_number <- values$account_data$number
+        account_number <- extract_account_number(values$account_data)
         if (is.null(account_number)) {
           cat("[ERROR] Account number not found\n")
           shiny::showNotification("Account number not found in account data", type = "error")
@@ -1313,7 +1279,8 @@ orionSmaServer <- function(id) {
           "&nbsp;&nbsp;• Status: Manually Managed<br><br>",
           "<strong>Step 2:</strong> Creating asset via API...<br>"
         )
-        values$steps_history <- append_steps(values$steps_history, steps_text, add_separator = TRUE)
+        separator <- if (values$steps_history != "") "<br><br><hr><br>" else ""
+        values$steps_history <- paste0(values$steps_history, separator, steps_text)
         output$steps <- shiny::renderUI(shiny::HTML(values$steps_history))
 
         shiny::withProgress(message = "Injecting asset...", value = 0, {
@@ -1351,7 +1318,7 @@ orionSmaServer <- function(id) {
               "<br><strong>Step 4:</strong> Refreshing assets list...<br>"
             )
 
-            values$steps_history <- append_steps(values$steps_history, steps_text)
+            values$steps_history <- paste0(values$steps_history, steps_text)
             output$steps <- shiny::renderUI(shiny::HTML(values$steps_history))
 
             shiny::showNotification("Asset injected successfully!", type = "message")
@@ -1376,7 +1343,7 @@ orionSmaServer <- function(id) {
               )
             }
 
-            values$steps_history <- append_steps(values$steps_history, steps_text)
+            values$steps_history <- paste0(values$steps_history, steps_text)
             output$steps <- shiny::renderUI(shiny::HTML(values$steps_history))
           } else {
             cat("[ERROR] Asset injection failed:", result$error, "\n")
@@ -1385,7 +1352,8 @@ orionSmaServer <- function(id) {
               "<strong>Asset Injection Failed:</strong><br>",
               result$error, "<br>"
             )
-            values$steps_history <- append_steps(values$steps_history, error_text, add_separator = TRUE)
+            separator <- if (values$steps_history != "") "<br><br><hr><br>" else ""
+            values$steps_history <- paste0(values$steps_history, separator, error_text)
             output$steps <- shiny::renderUI(shiny::HTML(values$steps_history))
           }
         })
@@ -1470,7 +1438,8 @@ orionSmaServer <- function(id) {
           "<pre>", jsonlite::toJSON(sma_object, pretty = TRUE, auto_unbox = TRUE), "</pre><br>",
           "<strong>Step 2:</strong> Sending update to API...<br>"
         )
-        values$steps_history <- append_steps(values$steps_history, preview_text, add_separator = TRUE)
+        separator <- if (values$steps_history != "") "<br><br><hr><br>" else ""
+        values$steps_history <- paste0(values$steps_history, separator, preview_text)
         output$steps <- shiny::renderUI(shiny::HTML(values$steps_history))
 
         shiny::withProgress(message = "Updating SMA settings...", value = 0, {
@@ -1493,25 +1462,35 @@ orionSmaServer <- function(id) {
               smaAssetID = sma_asset_id
             )
 
+            # Format change messages inline
+            is_sma_change <- if (old_values$isSMA != new_values$isSMA) {
+              paste0("&nbsp;&nbsp;• isSMA: ", old_values$isSMA, " → ", new_values$isSMA, "<br>")
+            } else {
+              paste0("&nbsp;&nbsp;• isSMA: ", new_values$isSMA, " (no change)<br>")
+            }
+
+            sma_asset_id_old <- ifelse(is.null(old_values$smaAssetID), "N/A", old_values$smaAssetID)
+            sma_asset_id_change <- if (sma_asset_id_old != new_values$smaAssetID) {
+              paste0("&nbsp;&nbsp;• smaAssetID: ", sma_asset_id_old, " → ", new_values$smaAssetID, "<br>")
+            } else {
+              paste0("&nbsp;&nbsp;• smaAssetID: ", new_values$smaAssetID, " (no change)<br>")
+            }
+
             success_msg <- paste0(
               "<strong>Step 3:</strong> Update Complete!<br><br>",
               "Account ID: ", account_id, "<br><br>",
               "<strong>Changes applied:</strong><br>",
-              format_change_message("isSMA", old_values$isSMA, new_values$isSMA),
+              is_sma_change,
               if (old_values$eclipseSMA != "False") {
                 paste0("&nbsp;&nbsp;• eclipseSMA: ", old_values$eclipseSMA, " → \"False\" (always set to string \"False\")<br>")
               } else {
                 "&nbsp;&nbsp;• eclipseSMA: \"False\" (no change)<br>"
               },
-              format_change_message(
-                "smaAssetID",
-                ifelse(is.null(old_values$smaAssetID), "N/A", old_values$smaAssetID),
-                new_values$smaAssetID
-              ),
+              sma_asset_id_change,
               "<br><strong>Step 4:</strong> Refreshing account data to verify...<br>"
             )
 
-            values$steps_history <- append_steps(values$steps_history, success_msg)
+            values$steps_history <- paste0(values$steps_history, success_msg)
             output$steps <- shiny::renderUI(shiny::HTML(values$steps_history))
 
             shiny::showNotification("SMA settings updated successfully!", type = "message")
@@ -1526,7 +1505,7 @@ orionSmaServer <- function(id) {
               "<br><strong>Step 3:</strong> Update Failed<br>",
               result$error, "<br>"
             )
-            values$steps_history <- append_steps(values$steps_history, error_text)
+            values$steps_history <- paste0(values$steps_history, error_text)
             output$steps <- shiny::renderUI(shiny::HTML(values$steps_history))
           }
         })
@@ -1615,7 +1594,7 @@ orionSmaServer <- function(id) {
               }
             }
 
-            values$steps_history <- append_steps(values$steps_history, verify_msg)
+            values$steps_history <- paste0(values$steps_history, verify_msg)
             output$steps <- shiny::renderUI(shiny::HTML(values$steps_history))
             populate_settings()
             values$expected_values <- NULL # Clear after verification
@@ -2080,8 +2059,9 @@ orionSmaServer <- function(id) {
         # Validate account IDs
         account_ids <- c()
         for (id in account_ids_raw) {
-          if (validate_account_id(id)) {
-            account_ids <- c(account_ids, id)
+          id_clean <- trimws(id)
+          if (id_clean != "" && grepl("^[0-9]+$", id_clean)) {
+            account_ids <- c(account_ids, id_clean)
           }
         }
 
