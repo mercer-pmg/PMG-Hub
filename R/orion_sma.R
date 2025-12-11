@@ -251,12 +251,463 @@ format_change_message <- function(field_name, old_val, new_val) {
   }
 }
 
+# Validate bulk CSV structure and data
+validate_bulk_csv <- function(csv_data) {
+  # #region agent log
+  log_file <- "c:\\Users\\AustinBurks\\OneDrive - Mercer Advisors\\Documents\\github\\PMG-Hub\\.cursor\\debug.log"
+  tryCatch(
+    {
+      log_entry <- jsonlite::toJSON(list(
+        id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+        timestamp = as.integer(Sys.time() * 1000),
+        location = "R/orion_sma.R:255",
+        message = "validate_bulk_csv entry",
+        data = list(
+          csv_is_null = is.null(csv_data),
+          csv_nrow = ifelse(is.null(csv_data), 0, nrow(csv_data)),
+          csv_cols = ifelse(is.null(csv_data), "NULL", paste(names(csv_data), collapse = ","))
+        ),
+        sessionId = "debug-session",
+        runId = "run1",
+        hypothesisId = "A"
+      ), auto_unbox = TRUE)
+      cat(log_entry, "\n", file = log_file, append = TRUE)
+    },
+    error = function(e) {}
+  )
+  # #endregion
+
+  if (is.null(csv_data) || nrow(csv_data) == 0) {
+    # #region agent log
+    tryCatch(
+      {
+        log_entry <- jsonlite::toJSON(list(
+          id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+          timestamp = as.integer(Sys.time() * 1000),
+          location = "R/orion_sma.R:258",
+          message = "validate_bulk_csv early return - empty",
+          data = list(valid = FALSE),
+          sessionId = "debug-session",
+          runId = "run1",
+          hypothesisId = "A"
+        ), auto_unbox = TRUE)
+        cat(log_entry, "\n", file = log_file, append = TRUE)
+      },
+      error = function(e) {}
+    )
+    # #endregion
+    return(list(valid = FALSE, error = "CSV file is empty or could not be read"))
+  }
+
+  # Normalize column names (case-insensitive, handle spaces/underscores)
+  col_names <- tolower(gsub("[_ ]", "", names(csv_data)))
+
+  # Find account ID column
+  account_col_idx <- which(col_names %in% c("accountid", "account_id", "account"))
+  if (length(account_col_idx) == 0) {
+    return(list(valid = FALSE, error = "CSV must contain an 'Account ID' column"))
+  }
+  account_col_name <- names(csv_data)[account_col_idx[1]]
+
+  # Find product ID column
+  product_col_idx <- which(col_names %in% c("productid", "product_id", "product"))
+  if (length(product_col_idx) == 0) {
+    return(list(valid = FALSE, error = "CSV must contain a 'Product ID' column"))
+  }
+  product_col_name <- names(csv_data)[product_col_idx[1]]
+
+  # Extract and validate data
+  account_ids <- csv_data[[account_col_name]]
+  product_ids <- csv_data[[product_col_name]]
+
+  # Remove rows with missing values
+  valid_rows <- !is.na(account_ids) & !is.na(product_ids) &
+    trimws(as.character(account_ids)) != "" &
+    trimws(as.character(product_ids)) != ""
+
+  if (sum(valid_rows) == 0) {
+    return(list(valid = FALSE, error = "No valid rows found in CSV (all rows have missing Account ID or Product ID)"))
+  }
+
+  # Convert to numeric and filter valid numeric IDs
+  account_ids_numeric <- suppressWarnings(as.integer(account_ids[valid_rows]))
+  product_ids_numeric <- suppressWarnings(as.integer(product_ids[valid_rows]))
+
+  numeric_valid <- !is.na(account_ids_numeric) & !is.na(product_ids_numeric) &
+    account_ids_numeric > 0 & product_ids_numeric > 0
+
+  if (sum(numeric_valid) == 0) {
+    return(list(valid = FALSE, error = "No valid numeric IDs found in CSV"))
+  }
+
+  # Create validated data frame
+  validated_data <- data.frame(
+    AccountID = account_ids_numeric[numeric_valid],
+    ProductID = product_ids_numeric[numeric_valid],
+    stringsAsFactors = FALSE
+  )
+
+  # #region agent log
+  tryCatch(
+    {
+      log_entry <- jsonlite::toJSON(list(
+        id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+        timestamp = as.integer(Sys.time() * 1000),
+        location = "R/orion_sma.R:314",
+        message = "validate_bulk_csv exit - success",
+        data = list(
+          valid = TRUE,
+          total_rows = nrow(validated_data),
+          account_col = account_col_name,
+          product_col = product_col_name,
+          sample_account_id = ifelse(nrow(validated_data) > 0, validated_data$AccountID[1], NA),
+          sample_product_id = ifelse(nrow(validated_data) > 0, validated_data$ProductID[1], NA)
+        ),
+        sessionId = "debug-session",
+        runId = "run1",
+        hypothesisId = "A"
+      ), auto_unbox = TRUE)
+      cat(log_entry, "\n", file = log_file, append = TRUE)
+    },
+    error = function(e) {}
+  )
+  # #endregion
+
+  return(list(
+    valid = TRUE,
+    data = validated_data,
+    account_col = account_col_name,
+    product_col = product_col_name,
+    total_rows = nrow(validated_data)
+  ))
+}
+
+# Check if product exists in account assets
+check_product_in_account <- function(account_id, product_id, token) {
+  result <- api_request(
+    method = "GET",
+    endpoint = paste0("/api/v1/Portfolio/Accounts/", account_id, "/Assets"),
+    token = token,
+    error_context = paste("Checking assets for Account ID", account_id)
+  )
+
+  if (!result$success) {
+    return(list(exists = FALSE, asset_id = NULL, error = result$error))
+  }
+
+  tryCatch(
+    {
+      assets_data <- jsonlite::fromJSON(
+        httr::content(result$response, as = "text", encoding = "UTF-8"),
+        simplifyDataFrame = FALSE
+      )
+
+      # Handle different response formats (matching load_assets pattern)
+      if (is.data.frame(assets_data)) {
+        # Convert data frame to list of lists
+        assets <- lapply(1:nrow(assets_data), function(i) {
+          as.list(assets_data[i, ])
+        })
+      } else if (is.list(assets_data)) {
+        # API returns direct array of assets
+        assets <- assets_data
+      } else {
+        assets <- list()
+      }
+
+      # Check each asset for matching product ID
+      for (asset in assets) {
+        if (is.list(asset)) {
+          asset_product_id <- extract_product_id(asset)
+          asset_id <- extract_asset_id(asset)
+
+          if (!is.null(asset_product_id) && asset_product_id == product_id && !is.null(asset_id)) {
+            return(list(exists = TRUE, asset_id = asset_id, error = NULL))
+          }
+        }
+      }
+
+      return(list(exists = FALSE, asset_id = NULL, error = NULL))
+    },
+    error = function(e) {
+      return(list(exists = FALSE, asset_id = NULL, error = paste("Error parsing assets:", e$message)))
+    }
+  )
+}
+
+# Check SMA settings for a single account
+check_account_sma <- function(account_id, token) {
+  result <- list(
+    account_id = account_id,
+    account_name = NULL,
+    account_number = NULL,
+    isSMA = FALSE,
+    eclipseSMA = "None",
+    smaAssetID = NULL,
+    status = "Unknown",
+    message = ""
+  )
+
+  # Fetch account data with SMA expansion
+  account_result <- api_request(
+    method = "GET",
+    endpoint = paste0("/api/v1/Portfolio/Accounts/Verbose/", account_id),
+    params = list(expand = "Sma"),
+    token = token,
+    error_context = paste("Account ID", account_id)
+  )
+
+  if (!account_result$success) {
+    result$status <- "Error"
+    result$message <- account_result$error
+    return(result)
+  }
+
+  tryCatch(
+    {
+      account_data <- jsonlite::fromJSON(
+        httr::content(account_result$response, as = "text", encoding = "UTF-8")
+      )
+
+      # Extract account info
+      result$account_name <- ifelse(is.null(account_data$name), "N/A", account_data$name)
+      result$account_number <- if (!is.null(account_data$number)) {
+        account_data$number
+      } else if (!is.null(account_data$accountNumber)) {
+        account_data$accountNumber
+      } else {
+        NULL
+      }
+
+      # Extract SMA values
+      sma_values <- extract_sma_values(account_data)
+      result$isSMA <- sma_values$isSMA
+      result$eclipseSMA <- sma_values$eclipseSMA
+      result$smaAssetID <- sma_values$smaAssetID
+
+      result$status <- "Success"
+      result$message <- "SMA settings retrieved successfully"
+    },
+    error = function(e) {
+      result$status <- "Error"
+      result$message <- paste("Error parsing account data:", e$message)
+    }
+  )
+
+  return(result)
+}
+
+# Process a single account-product pair
+process_single_account_product <- function(account_id, product_id, token) {
+  # #region agent log
+  log_file <- "c:\\Users\\AustinBurks\\OneDrive - Mercer Advisors\\Documents\\github\\PMG-Hub\\.cursor\\debug.log"
+  tryCatch(
+    {
+      log_entry <- jsonlite::toJSON(list(
+        id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+        timestamp = as.integer(Sys.time() * 1000),
+        location = "R/orion_sma.R:370",
+        message = "process_single_account_product entry",
+        data = list(
+          account_id = account_id,
+          product_id = product_id,
+          token_is_null = is.null(token),
+          token_length = ifelse(is.null(token), 0, nchar(token))
+        ),
+        sessionId = "debug-session",
+        runId = "run1",
+        hypothesisId = "D"
+      ), auto_unbox = TRUE)
+      cat(log_entry, "\n", file = log_file, append = TRUE)
+    },
+    error = function(e) {}
+  )
+  # #endregion
+
+  result <- list(
+    account_id = account_id,
+    product_id = product_id,
+    status = "Unknown",
+    message = "",
+    asset_id = NULL
+  )
+
+  # Step 1: Fetch account data to get account number
+  account_result <- api_request(
+    method = "GET",
+    endpoint = paste0("/api/v1/Portfolio/Accounts/Verbose/", account_id),
+    params = list(expand = "Sma"),
+    token = token,
+    error_context = paste("Account ID", account_id)
+  )
+
+  if (!account_result$success) {
+    result$status <- "Error"
+    result$message <- paste("Failed to fetch account:", account_result$error)
+    return(result)
+  }
+
+  account_data <- jsonlite::fromJSON(
+    httr::content(account_result$response, as = "text", encoding = "UTF-8")
+  )
+
+  # Extract account number using direct access (matching populate_settings pattern)
+  account_number <- if (!is.null(account_data$number)) {
+    account_data$number
+  } else if (!is.null(account_data$accountNumber)) {
+    account_data$accountNumber
+  } else {
+    NULL
+  }
+
+  if (is.null(account_number)) {
+    result$status <- "Error"
+    result$message <- "Account number not found in account data"
+    return(result)
+  }
+
+  # Step 2: Check if product already exists in account
+  check_result <- check_product_in_account(account_id, product_id, token)
+
+  if (!is.null(check_result$error) && check_result$error != "") {
+    result$status <- "Error"
+    result$message <- paste("Error checking assets:", check_result$error)
+    return(result)
+  }
+
+  asset_id <- NULL
+
+  if (check_result$exists) {
+    # Product already exists, use existing asset ID
+    asset_id <- check_result$asset_id
+    result$status <- "Skipped (already exists)"
+    result$message <- paste("Product already exists in account with Asset ID:", asset_id)
+  } else {
+    # Step 3: Inject asset
+    payload <- build_asset_payload(as.integer(account_id), account_number, product_id)
+    inject_result <- api_request(
+      method = "POST",
+      endpoint = "/api/v1/Portfolio/Assets/Verbose",
+      json_data = payload,
+      token = token,
+      error_context = paste("Injecting product", product_id, "into account", account_id)
+    )
+
+    if (!inject_result$success) {
+      result$status <- "Error"
+      result$message <- paste("Failed to inject asset:", inject_result$error)
+      return(result)
+    }
+
+    # Extract new asset ID from response
+    response_data <- jsonlite::fromJSON(
+      httr::content(inject_result$response, as = "text", encoding = "UTF-8")
+    )
+    asset_id <- extract_asset_id(response_data)
+
+    if (is.null(asset_id)) {
+      result$status <- "Error"
+      result$message <- "Asset injected but Asset ID not found in response"
+      return(result)
+    }
+
+    result$status <- "Injected"
+    result$message <- paste("Asset injected successfully, Asset ID:", asset_id)
+  }
+
+  result$asset_id <- asset_id
+
+  # Step 4: Update SMA settings
+  sma_object <- list(
+    isSma = TRUE,
+    eclipseSMA = "False",
+    smaAssetId = asset_id
+  )
+
+  sma_payload <- list(
+    id = NULL,
+    modelingInfo = NULL,
+    sma = sma_object
+  )
+
+  sma_result <- api_request(
+    method = "PUT",
+    endpoint = paste0("/api/v1/Portfolio/Accounts/UpdateDoNotTradeAndSma/", account_id),
+    json_data = sma_payload,
+    token = token,
+    error_context = paste("Updating SMA settings for Account ID", account_id)
+  )
+
+  if (!sma_result$success) {
+    result$status <- ifelse(result$status == "Skipped (already exists)", "Partial Success", "Partial Success")
+    result$message <- paste0(result$message, " | SMA update failed: ", sma_result$error)
+    return(result)
+  }
+
+  # Success!
+  if (result$status == "Skipped (already exists)") {
+    result$status <- "Success (already existed)"
+  } else {
+    result$status <- "Success"
+  }
+  result$message <- paste0(result$message, " | SMA settings updated successfully")
+
+  # #region agent log
+  tryCatch(
+    {
+      log_entry <- jsonlite::toJSON(list(
+        id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+        timestamp = as.integer(Sys.time() * 1000),
+        location = "R/orion_sma.R:480",
+        message = "process_single_account_product exit",
+        data = list(
+          account_id = result$account_id,
+          product_id = result$product_id,
+          status = result$status,
+          asset_id = result$asset_id,
+          message_length = nchar(result$message)
+        ),
+        sessionId = "debug-session",
+        runId = "run1",
+        hypothesisId = "D"
+      ), auto_unbox = TRUE)
+      cat(log_entry, "\n", file = log_file, append = TRUE)
+    },
+    error = function(e) {}
+  )
+  # #endregion
+
+  return(result)
+}
+
 # UI Function ----
 
 orionSmaUI <- function(id) {
   ns <- shiny::NS(id)
 
   shiny::tagList(
+    shiny::tags$style(HTML("
+      details.well summary {
+        list-style: none;
+        position: relative;
+        padding-left: 25px;
+      }
+      details.well summary::-webkit-details-marker {
+        display: none;
+      }
+      details.well summary::before {
+        content: '▶';
+        position: absolute;
+        left: 0;
+        color: #666;
+        font-size: 14px;
+        transition: transform 0.2s;
+      }
+      details.well[open] summary::before {
+        content: '▼';
+        transform: rotate(0deg);
+      }
+    ")),
     h1("Orion SMA Settings Updater"),
     shiny::fluidPage(
       # Top row: Token and Account ID side by side
@@ -313,8 +764,13 @@ orionSmaUI <- function(id) {
             h4("Account Information"),
             shiny::htmlOutput(ns("account_info"))
           ),
-          shiny::wellPanel(
-            h4("Process Steps"),
+          shiny::tags$details(
+            class = "well",
+            style = "margin-bottom: 20px;",
+            shiny::tags$summary(
+              style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px;",
+              "Process Steps"
+            ),
             shiny::htmlOutput(ns("steps"))
           )
         ),
@@ -358,6 +814,86 @@ orionSmaUI <- function(id) {
             )
           )
         )
+      ),
+
+      # Third row: Bulk CSV Processing
+      shiny::fluidRow(
+        shiny::column(
+          width = 12,
+          shiny::tags$details(
+            class = "well",
+            style = "margin-bottom: 20px;",
+            shiny::tags$summary(
+              style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px;",
+              "Bulk CSV Processing"
+            ),
+            shiny::p("Upload a CSV file with 'Account ID' and 'Product ID' columns. The system will automatically:"),
+            shiny::tags$ul(
+              shiny::tags$li("Check if each product exists in the account"),
+              shiny::tags$li("Inject missing products"),
+              shiny::tags$li("Configure SMA settings for all products")
+            ),
+            shiny::fileInput(
+              inputId = ns("bulk_csv_file"),
+              label = "CSV File (Account ID, Product ID)",
+              accept = c(".csv", "text/csv"),
+              width = "100%"
+            ),
+            shiny::htmlOutput(ns("csv_preview")),
+            shiny::actionButton(
+              inputId = ns("process_bulk_csv"),
+              label = "Process Bulk CSV",
+              class = "btn-primary",
+              width = "100%",
+              style = "margin-top: 10px; background-color: #28a745; border-color: #28a745;"
+            ),
+            shiny::htmlOutput(ns("bulk_progress")),
+            shiny::br(),
+            shiny::htmlOutput(ns("bulk_results_summary")),
+            shiny::br(),
+            DT::dataTableOutput(ns("bulk_results_table"))
+          )
+        )
+      ),
+
+      # Fourth row: SMA Settings Checker
+      shiny::fluidRow(
+        shiny::column(
+          width = 12,
+          shiny::tags$details(
+            class = "well",
+            style = "margin-bottom: 20px;",
+            shiny::tags$summary(
+              style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px;",
+              "SMA Settings Checker"
+            ),
+            shiny::p("Enter a list of Account IDs (one per line or comma-separated) to check SMA settings for each account."),
+            shiny::tags$ul(
+              shiny::tags$li("Checks if SMA assets exist in each account"),
+              shiny::tags$li("Returns SMA settings (isSMA, eclipseSMA, smaAssetID)"),
+              shiny::tags$li("Displays results in a table")
+            ),
+            shiny::textAreaInput(
+              inputId = ns("checker_account_ids"),
+              label = "Account IDs (one per line or comma-separated):",
+              placeholder = "1440289\n137764\n1402836",
+              rows = 5,
+              width = "100%"
+            ),
+            shiny::actionButton(
+              inputId = ns("run_checker"),
+              label = "Check SMA Settings",
+              class = "btn-primary",
+              width = "100%",
+              style = "margin-top: 10px; background-color: #17a2b8; border-color: #17a2b8;"
+            ),
+            shiny::htmlOutput(ns("checker_progress")),
+            shiny::br(),
+            shiny::htmlOutput(ns("checker_summary")),
+            shiny::br(),
+            DT::dataTableOutput(ns("checker_results_table"))
+          )
+        )
       )
     )
   )
@@ -379,7 +915,12 @@ orionSmaServer <- function(id) {
         asset_product_map = NULL,
         expected_values = NULL,
         refresh_trigger = 0,
-        steps_history = "" # Store cumulative steps history
+        steps_history = "", # Store cumulative steps history
+        bulk_csv_data = NULL,
+        bulk_results = NULL,
+        bulk_processing = FALSE,
+        checker_results = NULL,
+        checker_processing = FALSE
       )
 
       # Load products on module initialization
@@ -755,13 +1296,20 @@ orionSmaServer <- function(id) {
 
         cat("[DEBUG] Injecting asset - Product:", product_id, "\n")
 
+        # Mask account number (same logic as populate_settings)
+        masked_account_number <- if (account_number != "N/A" && nchar(account_number) > 4) {
+          paste0("****", substr(account_number, nchar(account_number) - 3, nchar(account_number)))
+        } else {
+          account_number
+        }
+
         # Update steps - append to history
         steps_text <- paste0(
           "<strong>Asset Injection Process:</strong><br><br>",
           "<strong>Step 1:</strong> Preparing asset injection...<br>",
           "&nbsp;&nbsp;• Product: ", selected_product, "<br>",
           "&nbsp;&nbsp;• Product ID: ", product_id, "<br>",
-          "&nbsp;&nbsp;• Account Number: ", account_number, "<br>",
+          "&nbsp;&nbsp;• Account Number: ", masked_account_number, "<br>",
           "&nbsp;&nbsp;• Status: Manually Managed<br><br>",
           "<strong>Step 2:</strong> Creating asset via API...<br>"
         )
@@ -1042,13 +1590,27 @@ orionSmaServer <- function(id) {
             )
 
             for (field in fields) {
-              match <- field$actual == field$expected
+              # Handle NULL comparison properly to avoid logical(0) result
+              if (is.null(field$actual) && is.null(field$expected)) {
+                match <- TRUE
+              } else if (is.null(field$actual) || is.null(field$expected)) {
+                match <- FALSE
+              } else {
+                match <- field$actual == field$expected
+              }
+
               if (all_match || match) {
-                verify_msg <- paste0(verify_msg, "&nbsp;&nbsp;• ", field$name, ": ", field$actual, "<br>")
+                verify_msg <- paste0(
+                  verify_msg, "&nbsp;&nbsp;• ", field$name, ": ",
+                  ifelse(is.null(field$actual), "NULL", as.character(field$actual)), "<br>"
+                )
               } else {
                 verify_msg <- paste0(
                   verify_msg,
-                  "&nbsp;&nbsp;• ", field$name, ": Expected ", field$expected, ", Got ", field$actual, "<br>"
+                  "&nbsp;&nbsp;• ", field$name, ": Expected ",
+                  ifelse(is.null(field$expected), "NULL", as.character(field$expected)),
+                  ", Got ",
+                  ifelse(is.null(field$actual), "NULL", as.character(field$actual)), "<br>"
                 )
               }
             }
@@ -1058,6 +1620,605 @@ orionSmaServer <- function(id) {
             populate_settings()
             values$expected_values <- NULL # Clear after verification
           }
+        }
+      })
+
+      # Handle CSV file upload and preview
+      shiny::observeEvent(input$bulk_csv_file, {
+        req(input$bulk_csv_file)
+
+        tryCatch(
+          {
+            csv_data <- readr::read_csv(input$bulk_csv_file$datapath, show_col_types = FALSE)
+            validation <- validate_bulk_csv(csv_data)
+
+            if (validation$valid) {
+              values$bulk_csv_data <- validation$data
+              values$bulk_results <- NULL
+
+              preview_text <- paste0(
+                "<div style='margin-top: 10px; padding: 10px; background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px;'>",
+                "<strong>✓ CSV validated successfully!</strong><br>",
+                "Found ", validation$total_rows, " valid rows.<br>",
+                "<small>Columns: ", validation$account_col, ", ", validation$product_col, "</small>",
+                "</div>"
+              )
+
+              output$csv_preview <- shiny::renderUI(shiny::HTML(preview_text))
+            } else {
+              values$bulk_csv_data <- NULL
+              preview_text <- paste0(
+                "<div style='margin-top: 10px; padding: 10px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;'>",
+                "<strong>✗ CSV validation failed:</strong><br>",
+                validation$error,
+                "</div>"
+              )
+              output$csv_preview <- shiny::renderUI(shiny::HTML(preview_text))
+              output$bulk_results_summary <- shiny::renderUI(shiny::HTML(""))
+              output$bulk_results_table <- NULL
+            }
+          },
+          error = function(e) {
+            values$bulk_csv_data <- NULL
+            preview_text <- paste0(
+              "<div style='margin-top: 10px; padding: 10px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px;'>",
+              "<strong>✗ Error reading CSV:</strong><br>",
+              e$message,
+              "</div>"
+            )
+            output$csv_preview <- shiny::renderUI(shiny::HTML(preview_text))
+          }
+        )
+      })
+
+      # Handle bulk CSV processing
+      shiny::observeEvent(input$process_bulk_csv, {
+        # #region agent log
+        log_file <- ".cursor/debug.log"
+        tryCatch(
+          {
+            log_entry <- jsonlite::toJSON(list(
+              id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+              timestamp = as.integer(Sys.time() * 1000),
+              location = "R/orion_sma.R:1409",
+              message = "bulk_csv_processing entry",
+              data = list(
+                bulk_csv_data_is_null = is.null(values$bulk_csv_data),
+                bulk_csv_data_nrow = ifelse(is.null(values$bulk_csv_data), 0, nrow(values$bulk_csv_data)),
+                bulk_processing = values$bulk_processing
+              ),
+              sessionId = "debug-session",
+              runId = "run1",
+              hypothesisId = "B"
+            ), auto_unbox = TRUE)
+            cat(log_entry, "\n", file = log_file, append = TRUE)
+          },
+          error = function(e) {}
+        )
+        # #endregion
+
+        # Validate token
+        token <- get_token(input$token)
+        if (is.null(token) || token == "") {
+          shiny::showNotification("API token required for bulk processing", type = "error")
+          return()
+        }
+
+        # Validate CSV data
+        if (is.null(values$bulk_csv_data) || nrow(values$bulk_csv_data) == 0) {
+          shiny::showNotification("Please upload a valid CSV file first", type = "error")
+          return()
+        }
+
+        # Prevent multiple simultaneous runs
+        if (values$bulk_processing) {
+          shiny::showNotification("Bulk processing already in progress", type = "warning")
+          return()
+        }
+
+        values$bulk_processing <- TRUE
+        csv_data <- values$bulk_csv_data
+        total_rows <- nrow(csv_data)
+        results_list <- list()
+
+        # Clear previous results
+        output$bulk_results <- shiny::renderUI(shiny::HTML(""))
+
+        # Process each row
+        shiny::withProgress(message = "Processing bulk CSV...", value = 0, {
+          for (i in 1:total_rows) {
+            account_id <- csv_data$AccountID[i]
+            product_id <- csv_data$ProductID[i]
+
+            # #region agent log
+            tryCatch(
+              {
+                log_entry <- jsonlite::toJSON(list(
+                  id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+                  timestamp = as.integer(Sys.time() * 1000),
+                  location = "R/orion_sma.R:1439",
+                  message = "bulk_csv_processing loop iteration",
+                  data = list(
+                    iteration = i,
+                    total_rows = total_rows,
+                    account_id = account_id,
+                    product_id = product_id,
+                    results_list_length = length(results_list)
+                  ),
+                  sessionId = "debug-session",
+                  runId = "run1",
+                  hypothesisId = "B"
+                ), auto_unbox = TRUE)
+                cat(log_entry, "\n", file = log_file, append = TRUE)
+              },
+              error = function(e) {}
+            )
+            # #endregion
+
+            # Update progress
+            progress_msg <- paste0(
+              "Processing row ", i, " of ", total_rows, "<br>",
+              "Account ID: ", account_id, " | Product ID: ", product_id
+            )
+            shiny::incProgress(1 / total_rows, detail = progress_msg)
+
+            output$bulk_progress <- shiny::renderUI(shiny::HTML(
+              paste0(
+                "<div style='margin-top: 10px; padding: 10px; background-color: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 4px;'>",
+                "<strong>Processing:</strong> ", progress_msg, "</div>"
+              )
+            ))
+
+            # Process this account-product pair
+            result <- process_single_account_product(account_id, product_id, token)
+
+            # #region agent log
+            tryCatch(
+              {
+                log_entry <- jsonlite::toJSON(list(
+                  id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+                  timestamp = as.integer(Sys.time() * 1000),
+                  location = "R/orion_sma.R:1461",
+                  message = "bulk_csv_processing result stored",
+                  data = list(
+                    iteration = i,
+                    result_status = result$status,
+                    result_has_asset_id = !is.null(result$asset_id),
+                    result_is_list = is.list(result),
+                    result_keys = paste(names(result), collapse = ",")
+                  ),
+                  sessionId = "debug-session",
+                  runId = "run1",
+                  hypothesisId = "B"
+                ), auto_unbox = TRUE)
+                cat(log_entry, "\n", file = log_file, append = TRUE)
+              },
+              error = function(e) {}
+            )
+            # #endregion
+
+            # Store result
+            results_list[[i]] <- result
+
+            # Small delay to avoid overwhelming the API
+            Sys.sleep(0.1)
+          }
+        })
+
+        # Convert results to data frame
+        # #region agent log
+        tryCatch(
+          {
+            log_entry <- jsonlite::toJSON(list(
+              id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+              timestamp = as.integer(Sys.time() * 1000),
+              location = "R/orion_sma.R:1469",
+              message = "bulk_csv_processing before results_df creation",
+              data = list(
+                results_list_length = length(results_list),
+                first_result_is_null = ifelse(length(results_list) > 0, is.null(results_list[[1]]), NA),
+                first_result_keys = ifelse(length(results_list) > 0 && !is.null(results_list[[1]]), paste(names(results_list[[1]]), collapse = ","), "N/A")
+              ),
+              sessionId = "debug-session",
+              runId = "run1",
+              hypothesisId = "B"
+            ), auto_unbox = TRUE)
+            cat(log_entry, "\n", file = log_file, append = TRUE)
+          },
+          error = function(e) {}
+        )
+        # #endregion
+
+        results_df <- tryCatch(
+          {
+            do.call(rbind, lapply(results_list, function(r) {
+              # #region agent log
+              tryCatch(
+                {
+                  log_entry <- jsonlite::toJSON(list(
+                    id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+                    timestamp = as.integer(Sys.time() * 1000),
+                    location = "R/orion_sma.R:1475",
+                    message = "bulk_csv_processing creating result row",
+                    data = list(
+                      r_is_null = is.null(r),
+                      r_is_list = is.list(r),
+                      r_has_account_id = ifelse(is.list(r), "account_id" %in% names(r), FALSE),
+                      r_has_product_id = ifelse(is.list(r), "product_id" %in% names(r), FALSE),
+                      r_has_status = ifelse(is.list(r), "status" %in% names(r), FALSE)
+                    ),
+                    sessionId = "debug-session",
+                    runId = "run1",
+                    hypothesisId = "B"
+                  ), auto_unbox = TRUE)
+                  cat(log_entry, "\n", file = log_file, append = TRUE)
+                },
+                error = function(e) {}
+              )
+              # #endregion
+
+              data.frame(
+                AccountID = r$account_id,
+                ProductID = r$product_id,
+                Status = r$status,
+                Message = r$message,
+                AssetID = ifelse(is.null(r$asset_id), NA, r$asset_id),
+                stringsAsFactors = FALSE
+              )
+            }))
+          },
+          error = function(e) {
+            # #region agent log
+            tryCatch(
+              {
+                log_entry <- jsonlite::toJSON(list(
+                  id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+                  timestamp = as.integer(Sys.time() * 1000),
+                  location = "R/orion_sma.R:1495",
+                  message = "bulk_csv_processing results_df creation ERROR",
+                  data = list(error = e$message),
+                  sessionId = "debug-session",
+                  runId = "run1",
+                  hypothesisId = "B"
+                ), auto_unbox = TRUE)
+                cat(log_entry, "\n", file = log_file, append = TRUE)
+              },
+              error = function(e2) {}
+            )
+            # #endregion
+            stop(e)
+          }
+        )
+
+        # #region agent log
+        tryCatch(
+          {
+            log_entry <- jsonlite::toJSON(list(
+              id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+              timestamp = as.integer(Sys.time() * 1000),
+              location = "R/orion_sma.R:1505",
+              message = "bulk_csv_processing after results_df creation",
+              data = list(
+                results_df_nrow = nrow(results_df),
+                results_df_ncol = ncol(results_df),
+                results_df_cols = paste(names(results_df), collapse = ","),
+                results_df_is_null = is.null(results_df)
+              ),
+              sessionId = "debug-session",
+              runId = "run1",
+              hypothesisId = "B"
+            ), auto_unbox = TRUE)
+            cat(log_entry, "\n", file = log_file, append = TRUE)
+          },
+          error = function(e) {}
+        )
+        # #endregion
+
+        values$bulk_results <- results_df
+        values$bulk_processing <- FALSE
+
+        # Clear progress
+        output$bulk_progress <- shiny::renderUI(shiny::HTML(""))
+
+        # Display results
+        success_count <- sum(results_df$Status == "Success")
+        error_count <- sum(results_df$Status == "Error")
+        skipped_count <- sum(results_df$Status %in% c("Skipped (already exists)", "Success (already existed)"))
+        partial_count <- sum(results_df$Status == "Partial Success")
+
+        summary_text <- paste0(
+          "<div style='margin-top: 15px; padding: 15px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;'>",
+          "<h5>Processing Complete!</h5>",
+          "<strong>Summary:</strong><br>",
+          "&nbsp;&nbsp;• Total processed: ", total_rows, "<br>",
+          "&nbsp;&nbsp;• Success: <span style='color: #28a745;'>", success_count, "</span><br>",
+          "&nbsp;&nbsp;• Skipped (already existed): <span style='color: #ffc107;'>", skipped_count, "</span><br>",
+          "&nbsp;&nbsp;• Partial success: <span style='color: #fd7e14;'>", partial_count, "</span><br>",
+          "&nbsp;&nbsp;• Errors: <span style='color: #dc3545;'>", error_count, "</span><br>",
+          "</div>"
+        )
+
+        output$bulk_results_summary <- shiny::renderUI(shiny::HTML(summary_text))
+
+        # Create results table
+        # #region agent log
+        tryCatch(
+          {
+            log_entry <- jsonlite::toJSON(list(
+              id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+              timestamp = as.integer(Sys.time() * 1000),
+              location = "R/orion_sma.R:1507",
+              message = "bulk_csv_processing before DT table render",
+              data = list(
+                results_df_nrow = nrow(results_df),
+                results_df_ncol = ncol(results_df),
+                results_df_has_status_col = "Status" %in% names(results_df),
+                dt_available = requireNamespace("DT", quietly = TRUE)
+              ),
+              sessionId = "debug-session",
+              runId = "run1",
+              hypothesisId = "C"
+            ), auto_unbox = TRUE)
+            cat(log_entry, "\n", file = log_file, append = TRUE)
+          },
+          error = function(e) {}
+        )
+        # #endregion
+
+        output$bulk_results_table <- tryCatch(
+          {
+            DT::renderDT({
+              DT::datatable(
+                results_df,
+                options = list(
+                  pageLength = 25,
+                  lengthMenu = list(c(10, 25, 50, 100, -1), c(10, 25, 50, 100, "All")),
+                  scrollX = TRUE,
+                  dom = "Bfrtip",
+                  buttons = list(
+                    list(extend = "copy", exportOptions = list(modifier = list(page = "all"))),
+                    list(extend = "csv", filename = "bulk_results", exportOptions = list(modifier = list(page = "all"))),
+                    list(extend = "excel", filename = "bulk_results", exportOptions = list(modifier = list(page = "all")))
+                  )
+                ),
+                extensions = "Buttons",
+                rownames = FALSE,
+                filter = "top"
+              ) |>
+                DT::formatStyle(
+                  "Status",
+                  backgroundColor = DT::styleEqual(
+                    c("Success", "Success (already existed)", "Skipped (already exists)", "Partial Success", "Error"),
+                    c("#d4edda", "#d4edda", "#fff3cd", "#ffeaa7", "#f8d7da")
+                  )
+                )
+            })
+          },
+          error = function(e) {
+            # #region agent log
+            tryCatch(
+              {
+                log_entry <- jsonlite::toJSON(list(
+                  id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+                  timestamp = as.integer(Sys.time() * 1000),
+                  location = "R/orion_sma.R:1535",
+                  message = "bulk_csv_processing DT table render ERROR",
+                  data = list(error = e$message),
+                  sessionId = "debug-session",
+                  runId = "run1",
+                  hypothesisId = "C"
+                ), auto_unbox = TRUE)
+                cat(log_entry, "\n", file = log_file, append = TRUE)
+              },
+              error = function(e2) {}
+            )
+            # #endregion
+            shiny::showNotification(paste("Error rendering results table:", e$message), type = "error")
+            NULL
+          }
+        )
+
+        # #region agent log
+        tryCatch(
+          {
+            log_entry <- jsonlite::toJSON(list(
+              id = paste0("log_", as.integer(Sys.time()), "_", sample(1000:9999, 1)),
+              timestamp = as.integer(Sys.time() * 1000),
+              location = "R/orion_sma.R:1545",
+              message = "bulk_csv_processing complete",
+              data = list(
+                total_rows = total_rows,
+                success_count = success_count,
+                error_count = error_count
+              ),
+              sessionId = "debug-session",
+              runId = "run1",
+              hypothesisId = "E"
+            ), auto_unbox = TRUE)
+            cat(log_entry, "\n", file = log_file, append = TRUE)
+          },
+          error = function(e) {}
+        )
+        # #endregion
+
+        shiny::showNotification(
+          paste("Bulk processing complete! Processed", total_rows, "rows."),
+          type = "message",
+          duration = 5
+        )
+      })
+
+      # Handle SMA Settings Checker
+      shiny::observeEvent(input$run_checker, {
+        # Validate token
+        token <- get_token(input$token)
+        if (is.null(token) || token == "") {
+          shiny::showNotification("API token required for checking SMA settings", type = "error")
+          return()
+        }
+
+        # Parse account IDs from input
+        account_ids_text <- trimws(input$checker_account_ids)
+        if (account_ids_text == "") {
+          shiny::showNotification("Please enter at least one Account ID", type = "error")
+          return()
+        }
+
+        # Prevent multiple simultaneous runs
+        if (values$checker_processing) {
+          shiny::showNotification("Checker already in progress", type = "warning")
+          return()
+        }
+
+        values$checker_processing <- TRUE
+
+        # Parse account IDs (support both comma-separated and newline-separated)
+        account_ids_raw <- strsplit(account_ids_text, "[,\n]")[[1]]
+        account_ids_raw <- trimws(account_ids_raw)
+        account_ids_raw <- account_ids_raw[account_ids_raw != ""]
+
+        # Validate account IDs
+        account_ids <- c()
+        for (id in account_ids_raw) {
+          if (validate_account_id(id)) {
+            account_ids <- c(account_ids, id)
+          }
+        }
+
+        if (length(account_ids) == 0) {
+          shiny::showNotification("No valid Account IDs found", type = "error")
+          values$checker_processing <- FALSE
+          return()
+        }
+
+        total_accounts <- length(account_ids)
+        results_list <- list()
+
+        # Clear previous results
+        output$checker_results_table <- NULL
+
+        # Process each account
+        shiny::withProgress(message = "Checking SMA settings...", value = 0, {
+          for (i in 1:total_accounts) {
+            account_id <- account_ids[i]
+
+            # Update progress
+            progress_msg <- paste0("Checking account ", i, " of ", total_accounts, ": ", account_id)
+            shiny::incProgress(1 / total_accounts, detail = progress_msg)
+
+            output$checker_progress <- shiny::renderUI(shiny::HTML(
+              paste0(
+                "<div style='margin-top: 10px; padding: 10px; background-color: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 4px;'>",
+                "<strong>Processing:</strong> ", progress_msg, "</div>"
+              )
+            ))
+
+            # Check this account
+            result <- check_account_sma(account_id, token)
+            results_list[[i]] <- result
+
+            # Small delay to avoid overwhelming the API
+            Sys.sleep(0.1)
+          }
+        })
+
+        # Convert results to data frame
+        results_df <- tryCatch(
+          {
+            do.call(rbind, lapply(results_list, function(r) {
+              # Mask account number
+              masked_account_number <- if (!is.null(r$account_number) && r$account_number != "N/A" && nchar(r$account_number) > 4) {
+                paste0("****", substr(r$account_number, nchar(r$account_number) - 3, nchar(r$account_number)))
+              } else {
+                ifelse(is.null(r$account_number), "N/A", r$account_number)
+              }
+
+              data.frame(
+                AccountID = r$account_id,
+                AccountName = ifelse(is.null(r$account_name), "N/A", r$account_name),
+                AccountNumber = masked_account_number,
+                isSMA = r$isSMA,
+                eclipseSMA = r$eclipseSMA,
+                smaAssetID = ifelse(is.null(r$smaAssetID), "None", as.character(r$smaAssetID)),
+                Status = r$status,
+                Message = r$message,
+                stringsAsFactors = FALSE
+              )
+            }))
+          },
+          error = function(e) {
+            shiny::showNotification(paste("Error creating results table:", e$message), type = "error")
+            NULL
+          }
+        )
+
+        values$checker_results <- results_df
+        values$checker_processing <- FALSE
+
+        # Clear progress
+        output$checker_progress <- shiny::renderUI(shiny::HTML(""))
+
+        if (!is.null(results_df)) {
+          # Display summary
+          success_count <- sum(results_df$Status == "Success")
+          error_count <- sum(results_df$Status == "Error")
+          sma_enabled_count <- sum(results_df$isSMA == TRUE)
+          sma_asset_count <- sum(results_df$smaAssetID != "None")
+
+          summary_text <- paste0(
+            "<div style='margin-top: 15px; padding: 15px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;'>",
+            "<h5>Check Complete!</h5>",
+            "<strong>Summary:</strong><br>",
+            "&nbsp;&nbsp;• Total checked: ", total_accounts, "<br>",
+            "&nbsp;&nbsp;• Successfully retrieved: <span style='color: #28a745;'>", success_count, "</span><br>",
+            "&nbsp;&nbsp;• Errors: <span style='color: #dc3545;'>", error_count, "</span><br>",
+            "&nbsp;&nbsp;• Accounts with SMA enabled: <span style='color: #17a2b8;'>", sma_enabled_count, "</span><br>",
+            "&nbsp;&nbsp;• Accounts with SMA Asset ID: <span style='color: #17a2b8;'>", sma_asset_count, "</span><br>",
+            "</div>"
+          )
+
+          output$checker_summary <- shiny::renderUI(shiny::HTML(summary_text))
+
+          # Create results table
+          output$checker_results_table <- DT::renderDT({
+            DT::datatable(
+              results_df,
+              options = list(
+                pageLength = 25,
+                lengthMenu = list(c(10, 25, 50, 100, -1), c(10, 25, 50, 100, "All")),
+                scrollX = TRUE,
+                dom = "Bfrtip",
+                buttons = list(
+                  list(extend = "copy", exportOptions = list(modifier = list(page = "all"))),
+                  list(extend = "csv", filename = "sma_checker_results", exportOptions = list(modifier = list(page = "all"))),
+                  list(extend = "excel", filename = "sma_checker_results", exportOptions = list(modifier = list(page = "all")))
+                )
+              ),
+              extensions = "Buttons",
+              rownames = FALSE,
+              filter = "top"
+            ) |>
+              DT::formatStyle(
+                "Status",
+                backgroundColor = DT::styleEqual(
+                  c("Success", "Error"),
+                  c("#d4edda", "#f8d7da")
+                )
+              ) |>
+              DT::formatStyle(
+                "isSMA",
+                backgroundColor = DT::styleEqual(
+                  c(TRUE, FALSE),
+                  c("#d1ecf1", "#fff3cd")
+                )
+              )
+          })
+
+          shiny::showNotification(
+            paste("SMA check complete! Processed", total_accounts, "account(s)."),
+            type = "message",
+            duration = 5
+          )
         }
       })
     }
