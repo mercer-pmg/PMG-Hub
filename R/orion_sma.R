@@ -675,7 +675,39 @@ orionSmaUI <- function(id) {
     ")),
     h1("Orion SMA Settings Updater"),
     shiny::fluidPage(
-      # Top row: Token and Account ID side by side
+      # Top row: Account Number Search (full width)
+      shiny::fluidRow(
+        shiny::column(
+          width = 12,
+          shiny::wellPanel(
+            h4("Search Account by Number"),
+            shiny::fluidRow(
+              shiny::column(
+                width = 8,
+                shiny::textInput(
+                  inputId = ns("account_search_number"),
+                  label = NULL,
+                  placeholder = "Enter account number to search",
+                  width = "100%"
+                )
+              ),
+              shiny::column(
+                width = 4,
+                shiny::actionButton(
+                  inputId = ns("search_account"),
+                  label = "Search",
+                  class = "btn-primary",
+                  width = "100%",
+                  style = "margin-top: 0;"
+                )
+              )
+            ),
+            shiny::htmlOutput(ns("account_search_results"))
+          )
+        )
+      ),
+
+      # Second row: Token and Account ID side by side
       shiny::fluidRow(
         # Column 1: API Token
         shiny::column(
@@ -720,7 +752,7 @@ orionSmaUI <- function(id) {
         )
       ),
 
-      # Second row: Account info and Asset injection side by side
+      # Third row: Account info and Asset injection side by side
       shiny::fluidRow(
         # Column 1: Account info display and Process Steps
         shiny::column(
@@ -732,7 +764,7 @@ orionSmaUI <- function(id) {
           shiny::tags$details(
             class = "well",
             open = "", # Auto-expand the details element
-            style = "margin-bottom: 20px;",
+            style = "margin-bottom: 20px; margin-top: 15px;",
             shiny::tags$summary(
               style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;",
               shiny::span("Process Steps"),
@@ -788,7 +820,7 @@ orionSmaUI <- function(id) {
         )
       ),
 
-      # Third row: Bulk CSV Processing
+      # Fourth row: Bulk CSV Processing
       shiny::fluidRow(
         shiny::column(
           width = 12,
@@ -828,7 +860,7 @@ orionSmaUI <- function(id) {
         )
       ),
 
-      # Fourth row: SMA Settings Checker
+      # Fifth row: SMA Settings Checker
       shiny::fluidRow(
         shiny::column(
           width = 12,
@@ -887,6 +919,7 @@ orionSmaServer <- function(id) {
         refresh_trigger = 0,
         steps_history = "", # Store cumulative steps history
         previous_account_id = NULL, # Track previous account ID to detect new account
+        account_search_results = NULL, # Store account search results
         bulk_csv_data = NULL,
         bulk_results = NULL,
         bulk_processing = FALSE,
@@ -960,6 +993,147 @@ orionSmaServer <- function(id) {
         )
       })
 
+
+      # Search for account by number
+      shiny::observeEvent(input$search_account, {
+        account_number <- trimws(input$account_search_number)
+        token <- get_token(input$token)
+
+        if (account_number == "") {
+          shiny::showNotification("Please enter an account number to search", type = "error")
+          return()
+        }
+
+        if (is.null(token) || token == "") {
+          shiny::showNotification("API token not found", type = "error")
+          return()
+        }
+
+        shiny::withProgress(message = "Searching for account...", value = 0, {
+          shiny::incProgress(0.5)
+
+          result <- api_request(
+            method = "GET",
+            endpoint = paste0("/api/v1/Portfolio/Accounts/Simple/Search/Number/", account_number),
+            params = list(exactMatch = FALSE),
+            token = token,
+            error_context = paste("Searching for account number", account_number)
+          )
+
+          shiny::incProgress(1)
+
+          if (result$success) {
+            response_data <- jsonlite::fromJSON(httr::content(result$response, as = "text", encoding = "UTF-8"))
+            values$account_search_results <- response_data
+
+            if (length(response_data) == 0 || (is.data.frame(response_data) && nrow(response_data) == 0)) {
+              output$account_search_results <- shiny::renderUI({
+                shiny::HTML("<p style='color: #666; margin-top: 10px;'>No accounts found matching that number.</p>")
+              })
+            } else {
+              # Convert to list if it's a data frame
+              if (is.data.frame(response_data)) {
+                accounts_list <- lapply(1:nrow(response_data), function(i) {
+                  as.list(response_data[i, ])
+                })
+              } else {
+                accounts_list <- response_data
+              }
+
+              # Build results HTML
+              results_html <- "<div style='margin-top: 10px;'>"
+              results_html <- paste0(results_html, "<strong>Found ", length(accounts_list), " account(s):</strong><br><br>")
+
+              for (i in seq_along(accounts_list)) {
+                account <- accounts_list[[i]]
+                account_id <- if (!is.null(account$id)) account$id else "N/A"
+                account_name <- if (!is.null(account$name)) account$name else "N/A"
+                account_number_display <- if (!is.null(account$number)) account$number else "N/A"
+                account_custodian <- if (!is.null(account$custodian)) account$custodian else "N/A"
+                is_active <- if (!is.null(account$isActive)) account$isActive else FALSE
+
+                results_html <- paste0(
+                  results_html,
+                  "<div style='border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 4px; background-color: #f9f9f9;'>",
+                  "<strong>Account ID:</strong> ", account_id, "<br>",
+                  "<strong>Name:</strong> ", account_name, "<br>",
+                  "<strong>Number:</strong> ", account_number_display, "<br>",
+                  "<strong>Custodian:</strong> ", account_custodian, "<br>",
+                  "<strong>Active:</strong> ", ifelse(is_active, "Yes", "No"), "<br>",
+                  "<button class='btn btn-sm btn-primary' onclick=\"Shiny.setInputValue('", session$ns("select_account_id"), "', '", account_id, "', {priority: 'event'})\" style='margin-top: 5px;'>Select This Account</button>",
+                  "</div>"
+                )
+              }
+
+              results_html <- paste0(results_html, "</div>")
+              output$account_search_results <- shiny::renderUI({
+                shiny::HTML(results_html)
+              })
+            }
+          } else {
+            output$account_search_results <- shiny::renderUI({
+              shiny::HTML(paste0("<p style='color: #d32f2f; margin-top: 10px;'>Error: ", result$error, "</p>"))
+            })
+            shiny::showNotification(result$error, type = "error")
+          }
+        })
+      })
+
+      # Handle account selection from search results
+      shiny::observeEvent(input$select_account_id, {
+        selected_id <- input$select_account_id
+        if (!is.null(selected_id) && selected_id != "") {
+          shiny::updateTextInput(
+            session = session,
+            inputId = "account_id",
+            value = as.character(selected_id)
+          )
+
+          # Auto-fetch account info
+          token_raw <- get_token(input$token)
+
+          if (is.null(token_raw) || token_raw == "") {
+            shiny::showNotification("API token not found", type = "error")
+            return()
+          }
+
+          account_id <- as.character(selected_id)
+
+          # Clear steps history if this is a new account ID
+          if (!is.null(values$previous_account_id) && values$previous_account_id != account_id) {
+            values$steps_history <- ""
+            output$steps <- shiny::renderUI(shiny::HTML(""))
+          }
+          values$previous_account_id <- account_id
+
+          cat("[DEBUG] Auto-fetching account:", account_id, "\n")
+
+          shiny::withProgress(message = "Fetching account information...", value = 0, {
+            shiny::incProgress(0.5)
+
+            result <- api_request(
+              method = "GET",
+              endpoint = paste0("/api/v1/Portfolio/Accounts/Verbose/", account_id),
+              params = list(expand = "Sma,Portfolio"),
+              token = token_raw,
+              error_context = paste("Account ID", account_id)
+            )
+
+            shiny::incProgress(1)
+
+            if (result$success) {
+              response_data <- jsonlite::fromJSON(httr::content(result$response, as = "text", encoding = "UTF-8"))
+              values$account_data <- response_data
+              populate_settings()
+              shiny::showNotification("Account info loaded successfully", type = "message")
+              cat("[DEBUG] Account loaded successfully\n")
+            } else {
+              cat("[ERROR] API request failed:", result$error, "\n")
+              shiny::showNotification(result$error, type = "error")
+            }
+          })
+        }
+      })
 
       # Fetch account info
       shiny::observeEvent(input$fetch_account, {
