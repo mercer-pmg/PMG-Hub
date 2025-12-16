@@ -731,10 +731,17 @@ orionSmaUI <- function(id) {
           ),
           shiny::tags$details(
             class = "well",
+            open = "", # Auto-expand the details element
             style = "margin-bottom: 20px;",
             shiny::tags$summary(
-              style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px;",
-              "Process Steps"
+              style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;",
+              shiny::span("Process Steps"),
+              shiny::actionButton(
+                inputId = ns("clear_steps"),
+                label = "Clear",
+                class = "btn-sm",
+                style = "margin-left: 10px; padding: 2px 8px; font-size: 12px;"
+              )
             ),
             shiny::htmlOutput(ns("steps"))
           )
@@ -873,14 +880,13 @@ orionSmaServer <- function(id) {
       # Reactive values
       values <- shiny::reactiveValues(
         account_data = NULL,
-        products = NULL,
-        product_map = NULL,
-        approved_product_ids = NULL,
-        assets_list = NULL,
+        products = list(),
+        assets = list(),
         asset_product_map = NULL,
         expected_values = NULL,
         refresh_trigger = 0,
         steps_history = "", # Store cumulative steps history
+        previous_account_id = NULL, # Track previous account ID to detect new account
         bulk_csv_data = NULL,
         bulk_results = NULL,
         bulk_processing = FALSE,
@@ -969,6 +975,14 @@ orionSmaServer <- function(id) {
 
         account_id <- validation$account_id
         token <- validation$token
+
+        # Clear steps history if this is a new account ID
+        if (!is.null(values$previous_account_id) && values$previous_account_id != account_id) {
+          values$steps_history <- ""
+          output$steps <- shiny::renderUI(shiny::HTML(""))
+        }
+        values$previous_account_id <- account_id
+
         cat("[DEBUG] Fetching account:", account_id, "\n")
 
         shiny::withProgress(message = "Fetching account information...", value = 0, {
@@ -977,7 +991,7 @@ orionSmaServer <- function(id) {
           result <- api_request(
             method = "GET",
             endpoint = paste0("/api/v1/Portfolio/Accounts/Verbose/", account_id),
-            params = list(expand = "Sma"),
+            params = list(expand = "Sma,Portfolio"),
             token = token,
             error_context = paste("Account ID", account_id)
           )
@@ -997,6 +1011,13 @@ orionSmaServer <- function(id) {
         })
       })
 
+      # Clear process steps when refresh button is clicked
+      shiny::observeEvent(input$clear_steps, {
+        values$steps_history <- ""
+        output$steps <- shiny::renderUI(shiny::HTML(""))
+        shiny::showNotification("Process steps cleared", type = "message")
+      })
+
       # Populate settings from account data
       populate_settings <- function() {
         if (is.null(values$account_data)) {
@@ -1009,6 +1030,17 @@ orionSmaServer <- function(id) {
 
         sma_values <- extract_sma_values(values$account_data)
 
+        # Extract model name from portfolio (when Portfolio is expanded)
+        model_name <- if (!is.null(values$account_data$portfolio) &&
+          !is.null(values$account_data$portfolio$modelName)) {
+          as.character(values$account_data$portfolio$modelName)
+        } else if (!is.null(values$account_data$modelName)) {
+          # Fallback: check if modelName is at top level
+          as.character(values$account_data$modelName)
+        } else {
+          "N/A"
+        }
+
         # Mask account number
         if (account_number != "N/A" && nchar(account_number) > 4) {
           masked_number <- paste0("****", substr(account_number, nchar(account_number) - 3, nchar(account_number)))
@@ -1019,6 +1051,7 @@ orionSmaServer <- function(id) {
         # Update account info display
         info_text <- paste0(
           "<strong>Account:</strong> ", account_name, " (", masked_number, ")<br><br>",
+          "<strong>Model Name:</strong> ", model_name, "<br><br>",
           "<strong>Current SMA Status:</strong><br>",
           "&nbsp;&nbsp;• isSMA: ", sma_values$isSMA, "<br>",
           "&nbsp;&nbsp;• eclipseSMA: ", sma_values$eclipseSMA, "<br>",
