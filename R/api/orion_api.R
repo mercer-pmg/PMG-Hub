@@ -443,6 +443,65 @@ check_account_sma <- function(account_id, token) {
     return(result)
 }
 
+# Update model aggregate for an account
+# Assign a model aggregate to an account.
+#
+# Parameters:
+#   account_id : integer - The account ID
+#   model_agg_id : integer - The model aggregate ID to assign
+#   token : character - API authentication token
+#
+# Returns:
+#   list with success (logical) and error (character) fields
+update_model_aggregate <- function(account_id, model_agg_id, token) {
+  base_url <- BASE_URL
+  endpoint <- paste0("/api/v1/Portfolio/Accounts/", account_id, "/ModelAgg/", model_agg_id)
+  
+  headers <- list(
+    "Authorization" = paste("Bearer", token),
+    "Accept" = "application/json",
+    "Content-Type" = "application/json"
+  )
+  
+  tryCatch(
+    {
+      url <- paste0(base_url, endpoint)
+      config <- httr::config(ssl_verifypeer = VERIFY_SSL)
+      
+      response <- httr::PATCH(
+        url,
+        do.call(httr::add_headers, headers),
+        config = config,
+        httr::timeout(30)
+      )
+      
+      status_code <- httr::status_code(response)
+      
+      if (status_code == 200) {
+        return(list(success = TRUE, error = NULL))
+      } else {
+        response_text <- httr::content(response, as = "text", encoding = "UTF-8")
+        response_preview <- substr(response_text, 1, 200)
+        
+        if (status_code == 400) {
+          error_msg <- paste("Validation Error - Bad Request:", response_preview)
+        } else if (status_code == 401) {
+          error_msg <- "Authentication Error - Invalid API token"
+        } else if (status_code == 404) {
+          error_msg <- paste("Not Found - Account or Model Aggregate not found:", response_preview)
+        } else {
+          error_msg <- paste("API Error", status_code, ":", response_preview)
+        }
+        
+        return(list(success = FALSE, error = error_msg, status_code = status_code))
+      }
+    },
+    error = function(e) {
+      return(list(success = FALSE, error = paste("Network Error: Failed to connect to API:", e$message)))
+    }
+  )
+}
+
 # Process a single account-product pair (inject asset and update SMA)
 process_single_account_product <- function(account_id, product_id, token) {
     result <- list(

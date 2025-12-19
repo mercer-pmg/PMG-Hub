@@ -87,6 +87,38 @@ load_products_from_csv <- function(csv_path = PRODUCTS_CSV_PATH) {
   )
 }
 
+# Load model aggregates from CSV file
+load_model_aggregates_from_csv <- function(csv_path = "model-aggs.csv") {
+  if (!file.exists(csv_path)) {
+    return(list())
+  }
+
+  cat("[DEBUG] Loading model aggregates from CSV:", csv_path, "\n")
+  tryCatch(
+    {
+      model_aggs_df <- readr::read_csv(csv_path, show_col_types = FALSE)
+      cat("[DEBUG] CSV loaded successfully, rows:", nrow(model_aggs_df), "\n")
+
+      # Remove any rows with missing values
+      model_aggs_df <- model_aggs_df[!is.na(model_aggs_df$modelAggId) & !is.na(model_aggs_df$modelName), ]
+
+      # Extract Model Aggregate ID and Model Name
+      model_aggs_list <- Map(
+        function(id, name) list(id = as.integer(id), name = as.character(name)),
+        model_aggs_df$modelAggId,
+        model_aggs_df$modelName
+      )
+
+      cat("[DEBUG] Model aggregates loaded successfully, total:", length(model_aggs_list), "\n")
+      return(model_aggs_list)
+    },
+    error = function(e) {
+      cat("[ERROR] Error loading model aggregates CSV:", e$message, "\n")
+      return(list())
+    }
+  )
+}
+
 # Validate bulk CSV structure and data
 validate_bulk_csv <- function(csv_data) {
   if (is.null(csv_data) || nrow(csv_data) == 0) {
@@ -321,6 +353,22 @@ orionSmaUI <- function(id) {
               class = "btn-primary",
               width = "100%"
             )
+          ),
+          shiny::wellPanel(
+            h4("Model Aggregate Assignment"),
+            shiny::selectInput(
+              inputId = ns("model_agg"),
+              label = "Model Aggregate:",
+              choices = c("No models loaded"),
+              width = "100%"
+            ),
+            shiny::actionButton(
+              inputId = ns("update_model_agg"),
+              label = "Update Model Aggregate",
+              class = "btn-primary",
+              width = "100%",
+              style = "margin-top: 10px;"
+            )
           )
         )
       ),
@@ -490,6 +538,26 @@ orionSmaServer <- function(id) {
             inputId = "product",
             choices = product_names,
             selected = product_names[1]
+          )
+        }
+      })
+
+      # Load model aggregates on module initialization
+      shiny::observe({
+        model_aggs_list <- load_model_aggregates_from_csv()
+        values$model_aggregates <- model_aggs_list
+
+        if (length(model_aggs_list) > 0) {
+          model_names <- sapply(model_aggs_list, function(x) x$name)
+          model_ids <- sapply(model_aggs_list, function(x) x$id)
+          names(model_ids) <- model_names
+          values$model_agg_map <- model_ids
+
+          shiny::updateSelectInput(
+            session = session,
+            inputId = "model_agg",
+            choices = model_names,
+            selected = model_names[1]
           )
         }
       })
@@ -1176,6 +1244,83 @@ orionSmaServer <- function(id) {
             values$expected_values <- NULL # Clear after verification
           }
         }
+      })
+
+      # Update Model Aggregate
+      shiny::observeEvent(input$update_model_agg, {
+        account_id_raw <- input$account_id
+        token_raw <- get_token(input$token)
+
+        validation <- validate_inputs(account_id_raw, token_raw)
+        if (!validation$valid) {
+          shiny::showNotification(validation$error, type = "error")
+          return()
+        }
+
+        account_id <- validation$account_id
+        token <- validation$token
+
+        selected_model <- input$model_agg
+        if (is.null(selected_model) || selected_model == "No models loaded") {
+          shiny::showNotification("Please select a model aggregate from the dropdown", type = "error")
+          return()
+        }
+
+        model_agg_id <- values$model_agg_map[[selected_model]]
+        if (is.null(model_agg_id)) {
+          shiny::showNotification("Invalid model aggregate selected", type = "error")
+          return()
+        }
+
+        cat("[DEBUG] Updating model aggregate - Model:", selected_model, ", ID:", model_agg_id, "\n")
+
+        # Update steps - append to history
+        steps_text <- paste0(
+          "<strong>Model Aggregate Update Process:</strong><br><br>",
+          "<strong>Step 1:</strong> Preparing model aggregate assignment...<br>",
+          "&nbsp;&nbsp;• Account ID: ", account_id, "<br>",
+          "&nbsp;&nbsp;• Model Aggregate: ", selected_model, "<br>",
+          "&nbsp;&nbsp;• Model Aggregate ID: ", model_agg_id, "<br><br>",
+          "<strong>Step 2:</strong> Sending update to API...<br>"
+        )
+        append_to_steps(steps_text)
+
+        shiny::withProgress(message = "Updating model aggregate...", value = 0, {
+          shiny::incProgress(0.5)
+
+          result <- update_model_aggregate(as.integer(account_id), model_agg_id, token)
+
+          shiny::incProgress(1)
+
+          if (result$success) {
+            cat("[DEBUG] Model aggregate updated successfully\n")
+
+            steps_text <- paste0(
+              "<br><strong>Step 3:</strong> Update Complete!<br><br>",
+              "Account ID: ", account_id, "<br>",
+              "Model Aggregate: ", selected_model, " (ID: ", model_agg_id, ")<br>",
+              "<br><strong>Model aggregate assigned successfully!</strong><br>"
+            )
+
+            append_to_steps(steps_text)
+            shiny::showNotification("Model aggregate updated successfully!", type = "message")
+
+            # Refresh account data to show updated model
+            account_result <- get_account_verbose(account_id, token, expand = "Sma,Portfolio")
+            if (account_result$success) {
+              values$account_data <- account_result$data
+              populate_settings()
+            }
+          } else {
+            cat("[ERROR] Model aggregate update failed:", result$error, "\n")
+            shiny::showNotification(result$error, type = "error")
+            error_text <- paste0(
+              "<br><strong>Step 3:</strong> Update Failed<br>",
+              result$error, "<br>"
+            )
+            append_to_steps(error_text)
+          }
+        })
       })
 
       # Handle CSV file upload and preview
