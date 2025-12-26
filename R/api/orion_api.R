@@ -1,11 +1,9 @@
 # Orion Advisor API Client Utilities
-# This module provides functions for interacting with the Orion Advisor API,
-# including account management, asset operations, and SMA settings.
 
 # API Configuration
 BASE_URL <- "https://api.orionadvisor.com"
 VERIFY_SSL <- FALSE
-TOKEN_MASK_LENGTH <- 100L
+TOKEN_MASK_LENGTH <- 200L
 
 # Token Management ----
 
@@ -25,15 +23,6 @@ get_token <- function(token_input = NULL) {
     if (nzchar(env_token)) env_token else NULL
 }
 
-# Validate token helper
-validate_token <- function(token_input) {
-    token <- get_token(token_input)
-    if (is.null(token) || token == "") {
-        return(list(valid = FALSE, error = "API token not found"))
-    }
-    list(valid = TRUE, token = token)
-}
-
 # Validate inputs (account ID and token)
 validate_inputs <- function(account_id, token) {
     account_id <- trimws(account_id)
@@ -51,13 +40,11 @@ validate_inputs <- function(account_id, token) {
 
 # API Request Wrapper ----
 
-# API request wrapper
 api_request <- function(method, endpoint, json_data = NULL, params = NULL, token, error_context = "") {
     tryCatch(
         {
             url <- paste0(BASE_URL, endpoint)
 
-            # Build headers inline
             headers <- list(
                 "Authorization" = paste("Bearer", token),
                 "Accept" = "application/json",
@@ -85,6 +72,15 @@ api_request <- function(method, endpoint, json_data = NULL, params = NULL, token
                 )
             } else if (method == "PUT") {
                 response <- httr::PUT(
+                    url,
+                    do.call(httr::add_headers, headers),
+                    body = json_data,
+                    encode = "json",
+                    config = config,
+                    httr::timeout(30)
+                )
+            } else if (method == "PATCH") {
+                response <- httr::PATCH(
                     url,
                     do.call(httr::add_headers, headers),
                     body = json_data,
@@ -127,28 +123,27 @@ api_request <- function(method, endpoint, json_data = NULL, params = NULL, token
     )
 }
 
-# Payload Builders ----
+# Response Parsing Helpers ----
 
-# Build asset payload for injection
-build_asset_payload <- function(account_id, account_number, product_id) {
-    list(
-        portfolio = list(
-            accountNumber = account_number,
-            productId = product_id,
-            accountId = account_id,
-            isManaged = TRUE,
-            isActive = TRUE,
-            isAdvisorOnly = TRUE,
-            status = "Manually Managed",
-            currentShares = 0,
-            currentValue = 0
-        )
+parse_json_response <- function(result, error_context = "parsing response", ...) {
+    if (!result$success) {
+        return(list(success = FALSE, error = result$error, data = NULL))
+    }
+
+    tryCatch(
+        {
+            parsed_data <- jsonlite::fromJSON(
+                httr::content(result$response, as = "text", encoding = "UTF-8"),
+                ...
+            )
+            return(list(success = TRUE, error = NULL, data = parsed_data))
+        },
+        error = function(e) {
+            return(list(success = FALSE, error = paste("Error", error_context, ":", e$message), data = NULL))
+        }
     )
 }
 
-# Response Parsing Helpers ----
-
-# Parse assets response from API
 parse_assets_response <- function(assets_data) {
     if (is.data.frame(assets_data)) {
         lapply(1:nrow(assets_data), function(i) as.list(assets_data[i, ]))
@@ -159,80 +154,14 @@ parse_assets_response <- function(assets_data) {
     }
 }
 
-# Extract asset ID from asset data
-extract_asset_id <- function(asset_data) {
-    if (!is.list(asset_data)) {
-        return(NULL)
-    }
-
-    # Asset injection response has id at top level
-    if (!is.null(asset_data$id)) {
-        return(as.integer(asset_data$id))
-    }
-
-    # Assets list also has id at top level, but check portfolio as fallback
-    if ("portfolio" %in% names(asset_data) && !is.null(asset_data$portfolio$id)) {
-        return(as.integer(asset_data$portfolio$id))
-    }
-
-    return(NULL)
-}
-
-# Extract product ID from asset data
-extract_product_id <- function(asset_data) {
-    if (!is.list(asset_data)) {
-        return(NULL)
-    }
-
-    # Assets list has productId at top level
-    if (!is.null(asset_data$productId)) {
-        return(as.integer(asset_data$productId))
-    }
-
-    # Asset injection response has productId nested in portfolio
-    if ("portfolio" %in% names(asset_data) && !is.null(asset_data$portfolio$productId)) {
-        return(as.integer(asset_data$portfolio$productId))
-    }
-
-    return(NULL)
-}
-
-# Extract account number from account data
-extract_account_number <- function(account_data) {
-    if (!is.null(account_data$number)) {
-        return(account_data$number)
-    } else if (!is.null(account_data$accountNumber)) {
-        return(account_data$accountNumber)
-    }
-    return(NULL)
-}
-
-# Extract SMA values from account data
-extract_sma_values <- function(account_data) {
-    if (!is.list(account_data)) {
-        return(list(isSMA = FALSE, eclipseSMA = "None", smaAssetID = NULL))
-    }
-
-    sma <- account_data$sma
-    if (is.null(sma) || !is.list(sma)) {
-        return(list(isSMA = FALSE, eclipseSMA = "None", smaAssetID = NULL))
-    }
-
-    list(
-        isSMA = ifelse(is.null(sma$isSma), FALSE, as.logical(sma$isSma)),
-        eclipseSMA = ifelse(is.null(sma$eclipseSMA), "None", as.character(sma$eclipseSMA)),
-        smaAssetID = if (!is.null(sma$smaAssetId)) as.integer(sma$smaAssetId) else NULL
-    )
+standardize_api_result <- function(result) {
+    list(success = result$success, error = if (!result$success) result$error else NULL)
 }
 
 # API Endpoint Functions ----
 
-# Get account information (verbose)
-get_account_verbose <- function(account_id, token, expand = NULL) {
-    params <- NULL
-    if (!is.null(expand)) {
-        params <- list(expand = expand)
-    }
+get_account <- function(account_id, token, expand = NULL) {
+    params <- if (!is.null(expand)) list(expand = expand) else NULL
 
     result <- api_request(
         method = "GET",
@@ -242,24 +171,14 @@ get_account_verbose <- function(account_id, token, expand = NULL) {
         error_context = paste("Account ID", account_id)
     )
 
-    if (!result$success) {
-        return(list(success = FALSE, error = result$error, data = NULL))
+    parse_result <- parse_json_response(result, error_context = "parsing account data")
+    if (!parse_result$success) {
+        return(list(success = FALSE, error = parse_result$error, data = NULL))
     }
 
-    tryCatch(
-        {
-            account_data <- jsonlite::fromJSON(
-                httr::content(result$response, as = "text", encoding = "UTF-8")
-            )
-            return(list(success = TRUE, error = NULL, data = account_data))
-        },
-        error = function(e) {
-            return(list(success = FALSE, error = paste("Error parsing account data:", e$message), data = NULL))
-        }
-    )
+    return(list(success = TRUE, error = NULL, data = parse_result$data))
 }
 
-# Get account assets
 get_account_assets <- function(account_id, token) {
     result <- api_request(
         method = "GET",
@@ -268,27 +187,16 @@ get_account_assets <- function(account_id, token) {
         error_context = paste("Loading assets for Account ID", account_id)
     )
 
-    if (!result$success) {
-        return(list(success = FALSE, error = result$error, data = list()))
+    parse_result <- parse_json_response(result, error_context = "parsing assets", simplifyDataFrame = FALSE)
+    if (!parse_result$success) {
+        return(list(success = FALSE, error = parse_result$error, data = list()))
     }
 
-    tryCatch(
-        {
-            assets_data <- jsonlite::fromJSON(
-                httr::content(result$response, as = "text", encoding = "UTF-8"),
-                simplifyDataFrame = FALSE
-            )
-            assets <- parse_assets_response(assets_data)
-            return(list(success = TRUE, error = NULL, data = assets))
-        },
-        error = function(e) {
-            return(list(success = FALSE, error = paste("Error parsing assets:", e$message), data = list()))
-        }
-    )
+    assets <- parse_assets_response(parse_result$data)
+    return(list(success = TRUE, error = NULL, data = assets))
 }
 
-# Search accounts by number
-search_accounts_by_number <- function(account_number, token, exact_match = FALSE) {
+get_accounts_by_number <- function(account_number, token, exact_match = FALSE) {
     result <- api_request(
         method = "GET",
         endpoint = paste0("/api/v1/Portfolio/Accounts/Simple/Search/Number/", account_number),
@@ -297,34 +205,37 @@ search_accounts_by_number <- function(account_number, token, exact_match = FALSE
         error_context = paste("Searching for account number", account_number)
     )
 
-    if (!result$success) {
-        return(list(success = FALSE, error = result$error, data = list()))
+    parse_result <- parse_json_response(result, error_context = "parsing accounts")
+    if (!parse_result$success) {
+        return(list(success = FALSE, error = parse_result$error, data = list()))
     }
 
-    tryCatch(
-        {
-            accounts_data <- jsonlite::fromJSON(
-                httr::content(result$response, as = "text", encoding = "UTF-8")
-            )
-            # Handle both list and single dict responses
-            if (is.data.frame(accounts_data)) {
-                accounts_list <- lapply(1:nrow(accounts_data), function(i) as.list(accounts_data[i, ]))
-            } else if (is.list(accounts_data) && !is.null(accounts_data$id)) {
-                accounts_list <- list(accounts_data)
-            } else {
-                accounts_list <- accounts_data
-            }
-            return(list(success = TRUE, error = NULL, data = accounts_list))
-        },
-        error = function(e) {
-            return(list(success = FALSE, error = paste("Error parsing accounts:", e$message), data = list()))
-        }
-    )
+    accounts_data <- parse_result$data
+    # Handle both list and single dict responses
+    if (is.data.frame(accounts_data)) {
+        accounts_list <- lapply(1:nrow(accounts_data), function(i) as.list(accounts_data[i, ]))
+    } else if (is.list(accounts_data) && !is.null(accounts_data$id)) {
+        accounts_list <- list(accounts_data)
+    } else {
+        accounts_list <- accounts_data
+    }
+    return(list(success = TRUE, error = NULL, data = accounts_list))
 }
 
-# Inject/create asset
-inject_asset <- function(account_id, account_number, product_id, token) {
-    payload <- build_asset_payload(as.integer(account_id), account_number, product_id)
+post_asset <- function(account_id, account_number, product_id, token) {
+    payload <- list(
+        portfolio = list(
+            accountNumber = account_number,
+            productId = product_id,
+            accountId = as.integer(account_id),
+            isManaged = TRUE,
+            isActive = TRUE,
+            isAdvisorOnly = TRUE,
+            status = "Manually Managed",
+            currentShares = 0,
+            currentValue = 0
+        )
+    )
 
     result <- api_request(
         method = "POST",
@@ -334,36 +245,25 @@ inject_asset <- function(account_id, account_number, product_id, token) {
         error_context = paste("Injecting product", product_id, "into account", account_id)
     )
 
-    if (!result$success) {
-        return(list(success = FALSE, error = result$error, data = NULL))
+    parse_result <- parse_json_response(result, error_context = "parsing response")
+    if (!parse_result$success) {
+        return(list(success = FALSE, error = parse_result$error, data = NULL, asset_id = NULL))
     }
 
-    tryCatch(
-        {
-            response_data <- jsonlite::fromJSON(
-                httr::content(result$response, as = "text", encoding = "UTF-8")
-            )
-            asset_id <- extract_asset_id(response_data)
-            return(list(success = TRUE, error = NULL, data = response_data, asset_id = asset_id))
-        },
-        error = function(e) {
-            return(list(success = FALSE, error = paste("Error parsing response:", e$message), data = NULL, asset_id = NULL))
-        }
-    )
+    response_data <- parse_result$data
+    asset_id <- as.integer(response_data$id)
+    return(list(success = TRUE, error = NULL, data = response_data, asset_id = asset_id))
 }
 
-# Update SMA settings
-update_sma_settings <- function(account_id, is_sma, sma_asset_id, token, eclipse_sma = "False") {
-    sma_object <- list(
-        isSma = is_sma,
-        eclipseSMA = eclipse_sma,
-        smaAssetId = sma_asset_id
-    )
-
+put_account_sma <- function(account_id, is_sma, sma_asset_id, token, eclipse_sma = "False") {
     sma_payload <- list(
         id = NULL,
         modelingInfo = NULL,
-        sma = sma_object
+        sma = list(
+            isSma = is_sma,
+            eclipseSMA = eclipse_sma,
+            smaAssetId = sma_asset_id
+        )
     )
 
     result <- api_request(
@@ -374,12 +274,11 @@ update_sma_settings <- function(account_id, is_sma, sma_asset_id, token, eclipse
         error_context = paste("Updating SMA settings for Account ID", account_id)
     )
 
-    return(list(success = result$success, error = if (!result$success) result$error else NULL))
+    return(standardize_api_result(result))
 }
 
 # High-Level API Functions ----
 
-# Check if product exists in account assets
 check_product_in_account <- function(account_id, product_id, token) {
     assets_result <- get_account_assets(account_id, token)
 
@@ -389,11 +288,10 @@ check_product_in_account <- function(account_id, product_id, token) {
 
     assets <- assets_result$data
 
-    # Check each asset for matching product ID
     for (asset in assets) {
         if (is.list(asset)) {
-            asset_product_id <- extract_product_id(asset)
-            asset_id <- extract_asset_id(asset)
+            asset_product_id <- asset$productId
+            asset_id <- asset$id
 
             if (!is.null(asset_product_id) && asset_product_id == product_id && !is.null(asset_id)) {
                 return(list(exists = TRUE, asset_id = asset_id, error = NULL))
@@ -404,7 +302,6 @@ check_product_in_account <- function(account_id, product_id, token) {
     return(list(exists = FALSE, asset_id = NULL, error = NULL))
 }
 
-# Check SMA settings for a single account
 check_account_sma <- function(account_id, token) {
     result <- list(
         account_id = account_id,
@@ -417,7 +314,7 @@ check_account_sma <- function(account_id, token) {
         message = ""
     )
 
-    account_result <- get_account_verbose(account_id, token, expand = "Sma")
+    account_result <- get_account(account_id, token, expand = "Sma")
 
     if (!account_result$success) {
         result$status <- "Error"
@@ -427,15 +324,13 @@ check_account_sma <- function(account_id, token) {
 
     account_data <- account_result$data
 
-    # Extract account info
     result$account_name <- ifelse(is.null(account_data$name), "N/A", account_data$name)
-    result$account_number <- extract_account_number(account_data)
+    result$account_number <- account_data$number
 
-    # Extract SMA values
-    sma_values <- extract_sma_values(account_data)
-    result$isSMA <- sma_values$isSMA
-    result$eclipseSMA <- sma_values$eclipseSMA
-    result$smaAssetID <- sma_values$smaAssetID
+    sma <- account_data$sma
+    result$isSMA <- as.logical(sma$isSma)
+    result$eclipseSMA <- as.character(sma$eclipseSMA)
+    result$smaAssetID <- as.integer(sma$smaAssetId)
 
     result$status <- "Success"
     result$message <- "SMA settings retrieved successfully"
@@ -443,66 +338,17 @@ check_account_sma <- function(account_id, token) {
     return(result)
 }
 
-# Update model aggregate for an account
-# Assign a model aggregate to an account.
-#
-# Parameters:
-#   account_id : integer - The account ID
-#   model_agg_id : integer - The model aggregate ID to assign
-#   token : character - API authentication token
-#
-# Returns:
-#   list with success (logical) and error (character) fields
-update_model_aggregate <- function(account_id, model_agg_id, token) {
-  base_url <- BASE_URL
-  endpoint <- paste0("/api/v1/Portfolio/Accounts/", account_id, "/ModelAgg/", model_agg_id)
-  
-  headers <- list(
-    "Authorization" = paste("Bearer", token),
-    "Accept" = "application/json",
-    "Content-Type" = "application/json"
-  )
-  
-  tryCatch(
-    {
-      url <- paste0(base_url, endpoint)
-      config <- httr::config(ssl_verifypeer = VERIFY_SSL)
-      
-      response <- httr::PATCH(
-        url,
-        do.call(httr::add_headers, headers),
-        config = config,
-        httr::timeout(30)
-      )
-      
-      status_code <- httr::status_code(response)
-      
-      if (status_code == 200) {
-        return(list(success = TRUE, error = NULL))
-      } else {
-        response_text <- httr::content(response, as = "text", encoding = "UTF-8")
-        response_preview <- substr(response_text, 1, 200)
-        
-        if (status_code == 400) {
-          error_msg <- paste("Validation Error - Bad Request:", response_preview)
-        } else if (status_code == 401) {
-          error_msg <- "Authentication Error - Invalid API token"
-        } else if (status_code == 404) {
-          error_msg <- paste("Not Found - Account or Model Aggregate not found:", response_preview)
-        } else {
-          error_msg <- paste("API Error", status_code, ":", response_preview)
-        }
-        
-        return(list(success = FALSE, error = error_msg, status_code = status_code))
-      }
-    },
-    error = function(e) {
-      return(list(success = FALSE, error = paste("Network Error: Failed to connect to API:", e$message)))
-    }
-  )
+patch_account_model_aggregate <- function(account_id, model_agg_id, token) {
+    result <- api_request(
+        method = "PATCH",
+        endpoint = paste0("/api/v1/Portfolio/Accounts/", account_id, "/ModelAgg/", model_agg_id),
+        token = token,
+        error_context = paste("Updating model aggregate", model_agg_id, "for Account ID", account_id)
+    )
+
+    return(standardize_api_result(result))
 }
 
-# Process a single account-product pair (inject asset and update SMA)
 process_single_account_product <- function(account_id, product_id, token) {
     result <- list(
         account_id = account_id,
@@ -513,7 +359,7 @@ process_single_account_product <- function(account_id, product_id, token) {
     )
 
     # Step 1: Fetch account data to get account number
-    account_result <- get_account_verbose(account_id, token, expand = "Sma")
+    account_result <- get_account(account_id, token, expand = "Sma")
 
     if (!account_result$success) {
         result$status <- "Error"
@@ -524,7 +370,7 @@ process_single_account_product <- function(account_id, product_id, token) {
     account_data <- account_result$data
 
     # Extract account number
-    account_number <- extract_account_number(account_data)
+    account_number <- account_data$number
 
     if (is.null(account_number)) {
         result$status <- "Error"
@@ -550,7 +396,7 @@ process_single_account_product <- function(account_id, product_id, token) {
         result$message <- paste("Product already exists in account with Asset ID:", asset_id)
     } else {
         # Step 3: Inject asset
-        inject_result <- inject_asset(account_id, account_number, product_id, token)
+        inject_result <- post_asset(account_id, account_number, product_id, token)
 
         if (!inject_result$success) {
             result$status <- "Error"
@@ -573,15 +419,14 @@ process_single_account_product <- function(account_id, product_id, token) {
     result$asset_id <- asset_id
 
     # Step 4: Update SMA settings
-    sma_result <- update_sma_settings(account_id, TRUE, asset_id, token)
+    sma_result <- put_account_sma(account_id, TRUE, asset_id, token)
 
     if (!sma_result$success) {
-        result$status <- ifelse(result$status == "Skipped (already exists)", "Partial Success", "Partial Success")
+        result$status <- "Partial Success"
         result$message <- paste0(result$message, " | SMA update failed: ", sma_result$error)
         return(result)
     }
 
-    # Success!
     if (result$status == "Skipped (already exists)") {
         result$status <- "Success (already existed)"
     } else {

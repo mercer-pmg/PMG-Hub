@@ -27,6 +27,25 @@ safe_equals <- function(a, b) {
   a == b
 }
 
+# Extract SMA values from account data
+extract_sma_values <- function(account_data) {
+  if (is.null(account_data) || !is.list(account_data) || is.null(account_data$sma)) {
+    return(list(isSMA = FALSE, eclipseSMA = "False", smaAssetID = NULL))
+  }
+
+  sma <- account_data$sma
+  is_sma_value <- if (!is.null(sma$isSma)) as.logical(sma$isSma) else FALSE
+  if (length(is_sma_value) == 0 || is.na(is_sma_value)) {
+    is_sma_value <- FALSE
+  }
+
+  list(
+    isSMA = is_sma_value,
+    eclipseSMA = if (!is.null(sma$eclipseSMA)) as.character(sma$eclipseSMA) else "False",
+    smaAssetID = if (!is.null(sma$smaAssetId)) as.integer(sma$smaAssetId) else NULL
+  )
+}
+
 # Parse account IDs from text input
 parse_account_ids <- function(account_ids_text) {
   account_ids_raw <- strsplit(trimws(account_ids_text), "[,\n]")[[1]]
@@ -499,7 +518,7 @@ orionSmaServer <- function(id) {
         shiny::withProgress(message = "Fetching account information...", value = 0, {
           shiny::incProgress(0.5)
 
-          account_result <- get_account_verbose(account_id, token, expand = "Sma,Portfolio")
+          account_result <- get_account(account_id, token, expand = "Sma,Portfolio")
 
           shiny::incProgress(1)
 
@@ -624,7 +643,7 @@ orionSmaServer <- function(id) {
         shiny::withProgress(message = "Searching for account...", value = 0, {
           shiny::incProgress(0.5)
 
-          search_result <- search_accounts_by_number(account_number, token, exact_match = FALSE)
+          search_result <- get_accounts_by_number(account_number, token, exact_match = FALSE)
 
           shiny::incProgress(1)
 
@@ -666,7 +685,7 @@ orionSmaServer <- function(id) {
                   "<strong>Number:</strong> ", account_number_display, "<br>",
                   "<strong>Custodian:</strong> ", account_custodian, "<br>",
                   "<strong>Active:</strong> ", ifelse(is_active, "Yes", "No"), "<br>",
-                  "<button class='btn btn-sm btn-primary' onclick=\"Shiny.setInputValue('", session$ns("select_account_id"), "', '", account_id, "', {priority: 'event'})\" style='margin-top: 5px;'>Select This Account</button>",
+                  "<button class='btn btn-sm' onclick=\"Shiny.setInputValue('", session$ns("select_account_id"), "', '", account_id, "', {priority: 'event'})\" style='margin-top: 5px; background-color: #9b1c7a; border-color: #9b1c7a; color: white;'>Select This Account</button>",
                   "</div>"
                 )
               }
@@ -735,7 +754,7 @@ orionSmaServer <- function(id) {
         }
 
         account_name <- ifelse(is.null(values$account_data$name), "N/A", values$account_data$name)
-        account_number_raw <- extract_account_number(values$account_data)
+        account_number_raw <- values$account_data$number
         account_number <- ifelse(is.null(account_number_raw), "N/A", account_number_raw)
 
         sma_values <- extract_sma_values(values$account_data)
@@ -973,7 +992,7 @@ orionSmaServer <- function(id) {
           return()
         }
 
-        account_number <- extract_account_number(values$account_data)
+        account_number <- values$account_data$number
         if (is.null(account_number)) {
           shiny::showNotification("Account number not found in account data", type = "error")
           return()
@@ -999,7 +1018,7 @@ orionSmaServer <- function(id) {
         shiny::withProgress(message = "Injecting asset...", value = 0, {
           shiny::incProgress(0.5)
 
-          inject_result <- inject_asset(as.integer(account_id), account_number, product_id, token)
+          inject_result <- post_asset(as.integer(account_id), account_number, product_id, token)
 
           shiny::incProgress(1)
 
@@ -1086,11 +1105,7 @@ orionSmaServer <- function(id) {
         cat("[DEBUG] Updating SMA - Asset:", sma_asset_id, ", isSMA:", is_sma, "\n")
 
         # Get current SMA values for comparison
-        current_sma_values <- if (!is.null(values$account_data)) {
-          extract_sma_values(values$account_data)
-        } else {
-          list(isSMA = FALSE, eclipseSMA = "False", smaAssetID = NULL)
-        }
+        current_sma_values <- extract_sma_values(values$account_data)
 
         old_values <- list(
           isSMA = current_sma_values$isSMA,
@@ -1122,7 +1137,7 @@ orionSmaServer <- function(id) {
 
         shiny::withProgress(message = "Updating SMA settings...", value = 0, {
           shiny::incProgress(0.5)
-          sma_result <- update_sma_settings(account_id, is_sma, sma_asset_id, token)
+          sma_result <- put_account_sma(account_id, is_sma, sma_asset_id, token)
 
           shiny::incProgress(1)
 
@@ -1135,10 +1150,13 @@ orionSmaServer <- function(id) {
             )
 
             # Format change messages inline
-            is_sma_change <- if (old_values$isSMA != new_values$isSMA) {
-              paste0("&nbsp;&nbsp;• isSMA: ", old_values$isSMA, " → ", new_values$isSMA, "<br>")
+            old_is_sma <- if (is.null(old_values$isSMA) || length(old_values$isSMA) == 0) FALSE else old_values$isSMA
+            new_is_sma <- if (is.null(new_values$isSMA) || length(new_values$isSMA) == 0) FALSE else new_values$isSMA
+            
+            is_sma_change <- if (old_is_sma != new_is_sma) {
+              paste0("&nbsp;&nbsp;• isSMA: ", old_is_sma, " → ", new_is_sma, "<br>")
             } else {
-              paste0("&nbsp;&nbsp;• isSMA: ", new_values$isSMA, " (no change)<br>")
+              paste0("&nbsp;&nbsp;• isSMA: ", new_is_sma, " (no change)<br>")
             }
 
             sma_asset_id_old <- ifelse(is.null(old_values$smaAssetID), "N/A", old_values$smaAssetID)
@@ -1189,7 +1207,7 @@ orionSmaServer <- function(id) {
         token <- get_token(input$token)
 
         if (account_id != "" && !is.null(token) && token != "") {
-          verify_result <- get_account_verbose(account_id, token, expand = "Sma")
+          verify_result <- get_account(account_id, token, expand = "Sma,Portfolio")
 
           if (verify_result$success) {
             values$account_data <- verify_result$data
@@ -1288,7 +1306,7 @@ orionSmaServer <- function(id) {
         shiny::withProgress(message = "Updating model aggregate...", value = 0, {
           shiny::incProgress(0.5)
 
-          result <- update_model_aggregate(as.integer(account_id), model_agg_id, token)
+          result <- patch_account_model_aggregate(as.integer(account_id), model_agg_id, token)
 
           shiny::incProgress(1)
 
@@ -1306,7 +1324,7 @@ orionSmaServer <- function(id) {
             shiny::showNotification("Model aggregate updated successfully!", type = "message")
 
             # Refresh account data to show updated model
-            account_result <- get_account_verbose(account_id, token, expand = "Sma,Portfolio")
+            account_result <- get_account(account_id, token, expand = "Sma,Portfolio")
             if (account_result$success) {
               values$account_data <- account_result$data
               populate_settings()
