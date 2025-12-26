@@ -221,8 +221,51 @@ parse_assets_response <- function(assets_data) {
     }
 }
 
-standardize_api_result <- function(result) {
-    list(success = result$success, error = if (!result$success) result$error else NULL)
+standardize_result <- function(success, error = NULL, data = NULL) {
+    list(success = success, error = error, data = data)
+}
+
+orion_request_json <- function(method,
+                               endpoint,
+                               token,
+                               error_context = "",
+                               params = NULL,
+                               json_data = NULL,
+                               simplify_vector = TRUE) {
+    result <- orion_request(
+        method = method,
+        endpoint = endpoint,
+        params = params,
+        json_data = json_data,
+        token = token,
+        error_context = error_context
+    )
+
+    parse_result <- parse_json_response(result, error_context = error_context, simplify_vector = simplify_vector)
+    if (!parse_result$success) {
+        return(standardize_result(FALSE, parse_result$error, NULL))
+    }
+
+    standardize_result(TRUE, NULL, parse_result$data)
+}
+
+# Extract SMA values safely from account data (prevents logical(0)/NULL issues)
+extract_sma_values <- function(account_data) {
+    sma <- NULL
+    if (is.list(account_data)) sma <- account_data$sma
+
+    if (is.null(sma) || !is.list(sma)) {
+        return(list(isSMA = FALSE, eclipseSMA = "False", smaAssetID = NULL))
+    }
+
+    is_sma <- if (!is.null(sma$isSma)) as.logical(sma$isSma) else FALSE
+    if (length(is_sma) == 0 || is.na(is_sma)) is_sma <- FALSE
+
+    list(
+        isSMA = is_sma,
+        eclipseSMA = if (!is.null(sma$eclipseSMA)) as.character(sma$eclipseSMA) else "False",
+        smaAssetID = if (!is.null(sma$smaAssetId)) as.integer(sma$smaAssetId) else NULL
+    )
 }
 
 # API Endpoint Functions ----
@@ -230,54 +273,48 @@ standardize_api_result <- function(result) {
 get_account <- function(account_id, token, expand = NULL) {
     params <- if (!is.null(expand)) list(expand = expand) else NULL
 
-    result <- orion_request(
+    orion_request_json(
         method = "GET",
         endpoint = paste0("/api/v1/Portfolio/Accounts/Verbose/", account_id),
         params = params,
         token = token,
-        error_context = paste("Account ID", account_id)
+        error_context = paste("Account ID", account_id),
+        simplify_vector = TRUE
     )
-
-    parse_result <- parse_json_response(result, error_context = "parsing account data")
-    if (!parse_result$success) {
-        return(list(success = FALSE, error = parse_result$error, data = NULL))
-    }
-
-    return(list(success = TRUE, error = NULL, data = parse_result$data))
 }
 
 get_account_assets <- function(account_id, token) {
-    result <- orion_request(
+    res <- orion_request_json(
         method = "GET",
         endpoint = paste0("/api/v1/Portfolio/Accounts/", account_id, "/Assets"),
         token = token,
-        error_context = paste("Loading assets for Account ID", account_id)
+        error_context = paste("Loading assets for Account ID", account_id),
+        # assets can be large/nested; keep it as list to avoid unwanted simplification
+        simplify_vector = FALSE
     )
 
-    parse_result <- parse_json_response(result, error_context = "parsing assets")
-    if (!parse_result$success) {
-        return(list(success = FALSE, error = parse_result$error, data = list()))
+    if (!res$success) {
+        return(standardize_result(FALSE, res$error, list()))
     }
 
-    assets <- parse_assets_response(parse_result$data)
-    return(list(success = TRUE, error = NULL, data = assets))
+    standardize_result(TRUE, NULL, parse_assets_response(res$data))
 }
 
 get_accounts_by_number <- function(account_number, token, exact_match = FALSE) {
-    result <- orion_request(
+    res <- orion_request_json(
         method = "GET",
         endpoint = paste0("/api/v1/Portfolio/Accounts/Simple/Search/Number/", account_number),
         params = list(exactMatch = exact_match),
         token = token,
-        error_context = paste("Searching for account number", account_number)
+        error_context = paste("Searching for account number", account_number),
+        simplify_vector = TRUE
     )
 
-    parse_result <- parse_json_response(result, error_context = "parsing accounts")
-    if (!parse_result$success) {
-        return(list(success = FALSE, error = parse_result$error, data = list()))
+    if (!res$success) {
+        return(standardize_result(FALSE, res$error, list()))
     }
 
-    accounts_data <- parse_result$data
+    accounts_data <- res$data
     # Handle both list and single dict responses
     if (is.data.frame(accounts_data)) {
         accounts_list <- lapply(1:nrow(accounts_data), function(i) as.list(accounts_data[i, ]))
@@ -286,7 +323,7 @@ get_accounts_by_number <- function(account_number, token, exact_match = FALSE) {
     } else {
         accounts_list <- accounts_data
     }
-    return(list(success = TRUE, error = NULL, data = accounts_list))
+    standardize_result(TRUE, NULL, accounts_list)
 }
 
 post_asset <- function(account_id, account_number, product_id, token) {
@@ -304,20 +341,20 @@ post_asset <- function(account_id, account_number, product_id, token) {
         )
     )
 
-    result <- orion_request(
+    res <- orion_request_json(
         method = "POST",
         endpoint = "/api/v1/Portfolio/Assets/Verbose",
         json_data = payload,
         token = token,
-        error_context = paste("Injecting product", product_id, "into account", account_id)
+        error_context = paste("Injecting product", product_id, "into account", account_id),
+        simplify_vector = TRUE
     )
 
-    parse_result <- parse_json_response(result, error_context = "parsing response")
-    if (!parse_result$success) {
-        return(list(success = FALSE, error = parse_result$error, data = NULL, asset_id = NULL))
+    if (!res$success) {
+        return(list(success = FALSE, error = res$error, data = NULL, asset_id = NULL))
     }
 
-    response_data <- parse_result$data
+    response_data <- res$data
     asset_id <- as.integer(response_data$id)
     return(list(success = TRUE, error = NULL, data = response_data, asset_id = asset_id))
 }
@@ -341,16 +378,14 @@ put_account_sma <- function(account_id, is_sma, sma_asset_id, token, eclipse_sma
         error_context = paste("Updating SMA settings for Account ID", account_id)
     )
 
-    return(standardize_api_result(result))
+    standardize_result(result$success, if (!result$success) result$error else NULL, NULL)
 }
 
-# High-Level API Functions ----
-
-check_product_in_account <- function(account_id, product_id, token) {
+find_asset_id_by_product <- function(account_id, product_id, token) {
     assets_result <- get_account_assets(account_id, token)
 
     if (!assets_result$success) {
-        return(list(exists = FALSE, asset_id = NULL, error = assets_result$error))
+        return(list(found = FALSE, asset_id = NULL, error = assets_result$error))
     }
 
     assets <- assets_result$data
@@ -361,12 +396,18 @@ check_product_in_account <- function(account_id, product_id, token) {
             asset_id <- asset$id
 
             if (!is.null(asset_product_id) && asset_product_id == product_id && !is.null(asset_id)) {
-                return(list(exists = TRUE, asset_id = asset_id, error = NULL))
+                return(list(found = TRUE, asset_id = asset_id, error = NULL))
             }
         }
     }
 
-    return(list(exists = FALSE, asset_id = NULL, error = NULL))
+    return(list(found = FALSE, asset_id = NULL, error = NULL))
+}
+
+# Backward compatible wrapper (older callers)
+check_product_in_account <- function(account_id, product_id, token) {
+    res <- find_asset_id_by_product(account_id, product_id, token)
+    list(exists = res$found, asset_id = res$asset_id, error = res$error)
 }
 
 check_account_sma <- function(account_id, token) {
@@ -394,10 +435,10 @@ check_account_sma <- function(account_id, token) {
     result$account_name <- ifelse(is.null(account_data$name), "N/A", account_data$name)
     result$account_number <- account_data$number
 
-    sma <- account_data$sma
-    result$isSMA <- as.logical(sma$isSma)
-    result$eclipseSMA <- as.character(sma$eclipseSMA)
-    result$smaAssetID <- as.integer(sma$smaAssetId)
+    sma_values <- extract_sma_values(account_data)
+    result$isSMA <- sma_values$isSMA
+    result$eclipseSMA <- sma_values$eclipseSMA
+    result$smaAssetID <- sma_values$smaAssetID
 
     result$status <- "Success"
     result$message <- "SMA settings retrieved successfully"
@@ -413,7 +454,7 @@ patch_account_model_aggregate <- function(account_id, model_agg_id, token) {
         error_context = paste("Updating model aggregate", model_agg_id, "for Account ID", account_id)
     )
 
-    return(standardize_api_result(result))
+    standardize_result(result$success, if (!result$success) result$error else NULL, NULL)
 }
 
 process_single_account_product <- function(account_id, product_id, token) {
@@ -446,7 +487,7 @@ process_single_account_product <- function(account_id, product_id, token) {
     }
 
     # Step 2: Check if product already exists in account
-    check_result <- check_product_in_account(account_id, product_id, token)
+    check_result <- find_asset_id_by_product(account_id, product_id, token)
 
     if (!is.null(check_result$error) && check_result$error != "") {
         result$status <- "Error"
@@ -456,7 +497,7 @@ process_single_account_product <- function(account_id, product_id, token) {
 
     asset_id <- NULL
 
-    if (check_result$exists) {
+    if (check_result$found) {
         # Product already exists, use existing asset ID
         asset_id <- check_result$asset_id
         result$status <- "Skipped (already exists)"
@@ -503,3 +544,4 @@ process_single_account_product <- function(account_id, product_id, token) {
 
     return(result)
 }
+
