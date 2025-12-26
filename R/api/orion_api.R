@@ -4,6 +4,7 @@
 BASE_URL <- "https://api.orionadvisor.com"
 VERIFY_SSL <- FALSE
 TIMEOUT <- 30L
+QUERY_GENERATION_TIMEOUT <- 1200L # 20 minutes for query generation
 MAX_RETRIES <- 3L
 RETRY_DELAY <- 1.0
 TOKEN_MASK_LENGTH <- 200L
@@ -44,7 +45,7 @@ validate_inputs <- function(account_id, token, account_id_label = "Account ID") 
     return(list(valid = TRUE, account_id = account_id, token = trimws(as.character(token))))
 }
 
-orion_request <- function(method, endpoint, json_data = NULL, params = NULL, token, error_context = "") {
+orion_request <- function(method, endpoint, json_data = NULL, params = NULL, token, error_context = "", timeout = NULL) {
     # Validate method
     if (!method %in% c("GET", "POST", "PUT", "PATCH", "DELETE")) {
         return(list(success = FALSE, error = paste("Unsupported HTTP method:", method), status_code = NULL))
@@ -54,6 +55,9 @@ orion_request <- function(method, endpoint, json_data = NULL, params = NULL, tok
     if (is.null(token) || trimws(token) == "") {
         return(list(success = FALSE, error = "API token is required", status_code = NULL))
     }
+
+    # Use provided timeout or default
+    request_timeout <- if (!is.null(timeout)) timeout else TIMEOUT
 
     url <- paste0(BASE_URL, endpoint)
     attempt <- 0
@@ -71,7 +75,7 @@ orion_request <- function(method, endpoint, json_data = NULL, params = NULL, tok
                         "Content-Type" = "application/json"
                     ) |>
                     httr2::req_options(ssl_verifypeer = VERIFY_SSL) |>
-                    httr2::req_timeout(TIMEOUT)
+                    httr2::req_timeout(request_timeout)
 
                 # Add query parameters for GET requests
                 if (!is.null(params) && method == "GET") {
@@ -231,14 +235,16 @@ orion_request_json <- function(method,
                                error_context = "",
                                params = NULL,
                                json_data = NULL,
-                               simplify_vector = TRUE) {
+                               simplify_vector = TRUE,
+                               timeout = NULL) {
     result <- orion_request(
         method = method,
         endpoint = endpoint,
         params = params,
         json_data = json_data,
         token = token,
-        error_context = error_context
+        error_context = error_context,
+        timeout = timeout
     )
 
     parse_result <- parse_json_response(result, error_context = error_context, simplify_vector = simplify_vector)
@@ -544,4 +550,3 @@ process_single_account_product <- function(account_id, product_id, token) {
 
     return(result)
 }
-
