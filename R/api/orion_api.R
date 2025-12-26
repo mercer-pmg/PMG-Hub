@@ -3,11 +3,13 @@
 # API Configuration
 BASE_URL <- "https://api.orionadvisor.com"
 VERIFY_SSL <- FALSE
+TIMEOUT <- 30L
+MAX_RETRIES <- 3L
+RETRY_DELAY <- 1.0
 TOKEN_MASK_LENGTH <- 200L
 
 # Token Management ----
 
-# Get token from input or environment variable
 get_token <- function(token_input = NULL) {
     # Check input token first
     if (!is.null(token_input)) {
@@ -24,122 +26,187 @@ get_token <- function(token_input = NULL) {
 }
 
 # Validate inputs (account ID and token)
-validate_inputs <- function(account_id, token) {
-    account_id <- trimws(account_id)
-
-    if (account_id == "" || !grepl("^[0-9]+$", account_id)) {
-        return(list(valid = FALSE, error = "Please enter a valid Account ID"))
+validate_inputs <- function(account_id, token, account_id_label = "Account ID") {
+    if (is.null(account_id) || length(account_id) == 0) {
+        return(list(valid = FALSE, error = paste(account_id_label, "cannot be NULL or empty")))
     }
 
-    if (is.null(token) || token == "") {
+    account_id <- trimws(as.character(account_id))
+
+    if (account_id == "" || !grepl("^[0-9]+$", account_id)) {
+        return(list(valid = FALSE, error = paste("Please enter a valid", account_id_label)))
+    }
+
+    if (is.null(token) || length(token) == 0 || trimws(as.character(token)) == "") {
         return(list(valid = FALSE, error = "API token not found"))
     }
 
-    return(list(valid = TRUE, account_id = account_id, token = token))
+    return(list(valid = TRUE, account_id = account_id, token = trimws(as.character(token))))
 }
 
-# API Request Wrapper ----
+orion_request <- function(method, endpoint, json_data = NULL, params = NULL, token, error_context = "") {
+    # Validate method
+    if (!method %in% c("GET", "POST", "PUT", "PATCH", "DELETE")) {
+        return(list(success = FALSE, error = paste("Unsupported HTTP method:", method), status_code = NULL))
+    }
 
-api_request <- function(method, endpoint, json_data = NULL, params = NULL, token, error_context = "") {
-    tryCatch(
-        {
-            url <- paste0(BASE_URL, endpoint)
+    # Validate token
+    if (is.null(token) || trimws(token) == "") {
+        return(list(success = FALSE, error = "API token is required", status_code = NULL))
+    }
 
-            headers <- list(
-                "Authorization" = paste("Bearer", token),
-                "Accept" = "application/json",
-                "Content-Type" = "application/json"
-            )
+    url <- paste0(BASE_URL, endpoint)
+    attempt <- 0
+    last_error <- NULL
 
-            config <- httr::config(ssl_verifypeer = VERIFY_SSL)
+    while (attempt <= MAX_RETRIES) {
+        result <- tryCatch(
+            {
+                # Build request using httr2
+                req <- httr2::request(url) |>
+                    httr2::req_method(method) |>
+                    httr2::req_headers(
+                        "Authorization" = paste("Bearer", token),
+                        "Accept" = "application/json",
+                        "Content-Type" = "application/json"
+                    ) |>
+                    httr2::req_options(ssl_verifypeer = VERIFY_SSL) |>
+                    httr2::req_timeout(TIMEOUT)
 
-            if (method == "GET") {
-                response <- httr::GET(
-                    url,
-                    do.call(httr::add_headers, headers),
-                    query = params,
-                    config = config,
-                    httr::timeout(30)
-                )
-            } else if (method == "POST") {
-                response <- httr::POST(
-                    url,
-                    do.call(httr::add_headers, headers),
-                    body = json_data,
-                    encode = "json",
-                    config = config,
-                    httr::timeout(30)
-                )
-            } else if (method == "PUT") {
-                response <- httr::PUT(
-                    url,
-                    do.call(httr::add_headers, headers),
-                    body = json_data,
-                    encode = "json",
-                    config = config,
-                    httr::timeout(30)
-                )
-            } else if (method == "PATCH") {
-                response <- httr::PATCH(
-                    url,
-                    do.call(httr::add_headers, headers),
-                    body = json_data,
-                    encode = "json",
-                    config = config,
-                    httr::timeout(30)
-                )
-            } else {
-                return(list(success = FALSE, error = paste("Unsupported HTTP method:", method)))
-            }
-
-            status_code <- httr::status_code(response)
-
-            if (status_code %in% c(200, 201, 204)) {
-                return(list(success = TRUE, response = response, status_code = status_code))
-            } else {
-                response_text <- httr::content(response, as = "text", encoding = "UTF-8")
-                response_preview <- substr(response_text, 1, 200)
-
-                if (status_code == 400) {
-                    error_msg <- paste("Validation Error - Bad Request:", error_context, "\n\nResponse:", response_preview)
-                } else if (status_code == 401) {
-                    error_msg <- "Authentication Error - Invalid API token"
-                } else if (status_code == 404) {
-                    error_msg <- paste("Not Found - Resource not found:", error_context, "\n\nResponse:", response_preview)
-                } else if (status_code == 405) {
-                    error_msg <- paste("API Error - Method Not Allowed (405):", error_context, "\n\nResponse:", response_preview)
-                } else if (status_code == 500) {
-                    error_msg <- paste("Server Error - Internal server error:", error_context, "\n\nResponse:", response_preview)
-                } else {
-                    error_msg <- paste("API Error", status_code, ":", response_preview)
+                # Add query parameters for GET requests
+                if (!is.null(params) && method == "GET") {
+                    req <- do.call(httr2::req_url_query, c(list(req), params))
                 }
 
-                return(list(success = FALSE, error = error_msg, status_code = status_code))
+                # Add JSON body for POST, PUT, PATCH requests
+                if (!is.null(json_data) && method %in% c("POST", "PUT", "PATCH")) {
+                    req <- req |> httr2::req_body_json(json_data)
+                }
+
+                # Perform request
+                response <- httr2::req_perform(req)
+                status_code <- httr2::resp_status(response)
+
+                # Handle rate limiting (429 Too Many Requests)
+                if (status_code == 429 && attempt < MAX_RETRIES) {
+                    retry_after <- httr2::resp_header(response, "Retry-After")
+                    delay <- if (!is.null(retry_after)) {
+                        as.numeric(retry_after)
+                    } else {
+                        RETRY_DELAY * (2^attempt) # Exponential backoff
+                    }
+                    Sys.sleep(delay)
+                    attempt <<- attempt + 1
+                    return(NULL) # Signal to continue loop
+                }
+
+                # Handle server errors (5xx) with retry
+                if (status_code >= 500 && status_code < 600 && attempt < MAX_RETRIES) {
+                    delay <- RETRY_DELAY * (2^attempt) # Exponential backoff
+                    Sys.sleep(delay)
+                    attempt <<- attempt + 1
+                    return(NULL) # Signal to continue loop
+                }
+
+                # Success or non-retryable error
+                if (status_code %in% c(200, 201, 204)) {
+                    return(list(success = TRUE, response = response, status_code = status_code))
+                } else {
+                    response_text <- tryCatch(
+                        httr2::resp_body_string(response),
+                        error = function(e) "[Unable to read response body]"
+                    )
+                    response_preview <- substr(response_text, 1, 200)
+
+                    error_msg <- .format_error_message(status_code, error_context, response_preview)
+                    return(list(success = FALSE, error = error_msg, status_code = status_code, response = response))
+                }
+            },
+            error = function(e) {
+                last_error <<- e
+                # Retry on network errors
+                if (attempt < MAX_RETRIES) {
+                    delay <- RETRY_DELAY * (2^attempt)
+                    Sys.sleep(delay)
+                    attempt <<- attempt + 1
+                    return(NULL) # Signal to continue loop
+                } else {
+                    return(list(
+                        success = FALSE,
+                        error = paste("Network Error: Failed to connect to API:", e$message),
+                        status_code = NULL
+                    ))
+                }
             }
-        },
-        error = function(e) {
-            return(list(success = FALSE, error = paste("Network Error: Failed to connect to API:", e$message)))
+        )
+
+        # If we got a result (not NULL), return it
+        if (!is.null(result)) {
+            return(result)
         }
-    )
+    }
+
+    # If we get here, all retries failed
+    if (!is.null(last_error)) {
+        return(list(
+            success = FALSE,
+            error = paste("Network Error: Failed after", MAX_RETRIES, "retries:", last_error$message),
+            status_code = NULL
+        ))
+    }
+
+    # Fallback (should never reach here)
+    return(list(success = FALSE, error = "Unknown error occurred", status_code = NULL))
+}
+
+# Helper function to format error messages
+.format_error_message <- function(status_code, error_context, response_preview) {
+    if (status_code == 400) {
+        return(paste("Validation Error - Bad Request:", error_context, "\n\nResponse:", response_preview))
+    } else if (status_code == 401) {
+        return("Authentication Error - Invalid API token")
+    } else if (status_code == 403) {
+        return(paste("Forbidden - Access denied:", error_context))
+    } else if (status_code == 404) {
+        return(paste("Not Found - Resource not found:", error_context, "\n\nResponse:", response_preview))
+    } else if (status_code == 405) {
+        return(paste("API Error - Method Not Allowed (405):", error_context, "\n\nResponse:", response_preview))
+    } else if (status_code == 429) {
+        return(paste("Rate Limit Error - Too many requests:", error_context))
+    } else if (status_code >= 500 && status_code < 600) {
+        return(paste("Server Error - Internal server error:", error_context, "\n\nResponse:", response_preview))
+    } else {
+        return(paste("API Error", status_code, ":", response_preview))
+    }
 }
 
 # Response Parsing Helpers ----
 
-parse_json_response <- function(result, error_context = "parsing response", ...) {
+parse_json_response <- function(result, error_context = "parsing response", simplify_vector = TRUE) {
     if (!result$success) {
         return(list(success = FALSE, error = result$error, data = NULL))
     }
 
+    if (is.null(result$response)) {
+        return(list(success = FALSE, error = paste("Error", error_context, ": No response object available"), data = NULL))
+    }
+
     tryCatch(
         {
-            parsed_data <- jsonlite::fromJSON(
-                httr::content(result$response, as = "text", encoding = "UTF-8"),
-                ...
-            )
+            parsed_data <- httr2::resp_body_json(result$response, simplifyVector = simplify_vector)
             return(list(success = TRUE, error = NULL, data = parsed_data))
         },
         error = function(e) {
-            return(list(success = FALSE, error = paste("Error", error_context, ":", e$message), data = NULL))
+            # Try to get raw response for debugging
+            raw_response <- tryCatch(
+                httr2::resp_body_string(result$response),
+                error = function(e2) "[Unable to read response]"
+            )
+            return(list(
+                success = FALSE,
+                error = paste("Error", error_context, ":", e$message, "\nRaw response:", substr(raw_response, 1, 200)),
+                data = NULL
+            ))
         }
     )
 }
@@ -163,7 +230,7 @@ standardize_api_result <- function(result) {
 get_account <- function(account_id, token, expand = NULL) {
     params <- if (!is.null(expand)) list(expand = expand) else NULL
 
-    result <- api_request(
+    result <- orion_request(
         method = "GET",
         endpoint = paste0("/api/v1/Portfolio/Accounts/Verbose/", account_id),
         params = params,
@@ -180,14 +247,14 @@ get_account <- function(account_id, token, expand = NULL) {
 }
 
 get_account_assets <- function(account_id, token) {
-    result <- api_request(
+    result <- orion_request(
         method = "GET",
         endpoint = paste0("/api/v1/Portfolio/Accounts/", account_id, "/Assets"),
         token = token,
         error_context = paste("Loading assets for Account ID", account_id)
     )
 
-    parse_result <- parse_json_response(result, error_context = "parsing assets", simplifyDataFrame = FALSE)
+    parse_result <- parse_json_response(result, error_context = "parsing assets")
     if (!parse_result$success) {
         return(list(success = FALSE, error = parse_result$error, data = list()))
     }
@@ -197,7 +264,7 @@ get_account_assets <- function(account_id, token) {
 }
 
 get_accounts_by_number <- function(account_number, token, exact_match = FALSE) {
-    result <- api_request(
+    result <- orion_request(
         method = "GET",
         endpoint = paste0("/api/v1/Portfolio/Accounts/Simple/Search/Number/", account_number),
         params = list(exactMatch = exact_match),
@@ -237,7 +304,7 @@ post_asset <- function(account_id, account_number, product_id, token) {
         )
     )
 
-    result <- api_request(
+    result <- orion_request(
         method = "POST",
         endpoint = "/api/v1/Portfolio/Assets/Verbose",
         json_data = payload,
@@ -266,7 +333,7 @@ put_account_sma <- function(account_id, is_sma, sma_asset_id, token, eclipse_sma
         )
     )
 
-    result <- api_request(
+    result <- orion_request(
         method = "PUT",
         endpoint = paste0("/api/v1/Portfolio/Accounts/UpdateDoNotTradeAndSma/", account_id),
         json_data = sma_payload,
@@ -339,7 +406,7 @@ check_account_sma <- function(account_id, token) {
 }
 
 patch_account_model_aggregate <- function(account_id, model_agg_id, token) {
-    result <- api_request(
+    result <- orion_request(
         method = "PATCH",
         endpoint = paste0("/api/v1/Portfolio/Accounts/", account_id, "/ModelAgg/", model_agg_id),
         token = token,
