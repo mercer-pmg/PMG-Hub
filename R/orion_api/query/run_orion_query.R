@@ -1,9 +1,4 @@
 # Run Orion Query Function
-# Source dependencies
-source("R/api/orion_api.R")
-source("R/api/query/get_query_parameters.R")
-source("R/api/query/update_query_prompts_by_text.R")
-source("R/api/query/generate_query_results.R")
 
 #' Run an Orion custom reporting query
 #'

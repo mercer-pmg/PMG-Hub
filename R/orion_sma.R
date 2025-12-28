@@ -1,7 +1,7 @@
 # Orion SMA Settings Module
 
 # Source API functions
-source("R/api/orion_api.R")
+source("R/orion_api/orion_api.R")
 
 # Module Configuration
 PRODUCTS_CSV_PATH <- "long-short-products.csv"

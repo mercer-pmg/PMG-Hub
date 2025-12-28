@@ -1,6 +1,4 @@
 # Download Query File Function
-# Source the main API utilities
-source("R/api/orion_api.R")
 
 #' Download and read query result file from location URL
 #'

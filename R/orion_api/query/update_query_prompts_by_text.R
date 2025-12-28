@@ -1,6 +1,4 @@
 # Update Query Prompts Function
-# Source the main API utilities
-source("R/api/orion_api.R")
 
 #' Update query prompts by matching prompt text pattern
 #'

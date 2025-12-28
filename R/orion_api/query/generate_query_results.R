@@ -1,7 +1,4 @@
 # Generate Query Results Function
-# Source dependencies
-source("R/api/orion_api.R")
-source("R/api/query/download_query_file.R")
 
 #' Generate query results
 #'

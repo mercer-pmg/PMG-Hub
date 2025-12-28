@@ -2,8 +2,7 @@
 # This demonstrates how to use the generic query functions to run a specific query
 
 # Source the generic Orion API functions and query utilities
-source("../orion_api.R")
-source("run_orion_query.R")
+source("R/orion_api/orion_api.R")
 
 # Query ID
 query_id <- 40790

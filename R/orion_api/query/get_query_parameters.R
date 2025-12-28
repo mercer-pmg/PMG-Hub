@@ -1,6 +1,4 @@
 # Get Query Parameters Function
-# Source the main API utilities
-source("R/api/orion_api.R")
 
 #' Get query parameters for a custom reporting query
 #'
