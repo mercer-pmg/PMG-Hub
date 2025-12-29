@@ -74,65 +74,39 @@ get_dt_options <- function(filename_prefix = "results") {
   )
 }
 
-# Load products from CSV file
-load_products_from_csv <- function(csv_path = PRODUCTS_CSV_PATH) {
-  if (!file.exists(csv_path)) {
-    return(list())
-  }
+# Load products from AWS
+load_products_from_aws <- function() {
+  cat("[DEBUG] Loading products from AWS\n")
+  products_df <- kdot::get_long_short_products()
+  cat("[DEBUG] AWS loaded successfully, rows:", nrow(products_df), "\n")
 
-  cat("[DEBUG] Loading products from CSV:", csv_path, "\n")
-  tryCatch(
-    {
-      products_df <- readr::read_csv(csv_path, show_col_types = FALSE)
-      cat("[DEBUG] CSV loaded successfully, rows:", nrow(products_df), "\n")
-
-      # Extract Product ID and Product Name
-      products_list <- Map(
-        function(id, name) list(id = as.integer(id), name = as.character(name)),
-        products_df$`Product ID`,
-        products_df$`Product Name`
-      )
-
-      cat("[DEBUG] Products loaded successfully, total:", length(products_list), "\n")
-      return(products_list)
-    },
-    error = function(e) {
-      cat("[ERROR] Error loading products CSV:", e$message, "\n")
-      return(list())
-    }
+  # Extract Product ID and Product Name
+  products_list <- Map(
+    function(id, name) list(id = as.integer(id), name = as.character(name)),
+    products_df$`Product ID`,
+    products_df$`Product Name`
   )
+
+  return(products_list)
 }
 
-# Load model aggregates from CSV file
-load_model_aggregates_from_csv <- function(csv_path = "model-aggs.csv") {
-  if (!file.exists(csv_path)) {
-    return(list())
-  }
+# Load model aggregates from AWS
+load_model_aggregates_from_aws <- function() {
+  cat("[DEBUG] Loading model aggregates from AWS\n")
+  model_aggs_df <- kdot::get_model_aggregates()
+  cat("[DEBUG] AWS loaded successfully, rows:", nrow(model_aggs_df), "\n")
 
-  cat("[DEBUG] Loading model aggregates from CSV:", csv_path, "\n")
-  tryCatch(
-    {
-      model_aggs_df <- readr::read_csv(csv_path, show_col_types = FALSE)
-      cat("[DEBUG] CSV loaded successfully, rows:", nrow(model_aggs_df), "\n")
+  # Remove any rows with missing values
+  model_aggs_df <- model_aggs_df[!is.na(model_aggs_df$modelAggId) & !is.na(model_aggs_df$modelName), ]
 
-      # Remove any rows with missing values
-      model_aggs_df <- model_aggs_df[!is.na(model_aggs_df$modelAggId) & !is.na(model_aggs_df$modelName), ]
-
-      # Extract Model Aggregate ID and Model Name
-      model_aggs_list <- Map(
-        function(id, name) list(id = as.integer(id), name = as.character(name)),
-        model_aggs_df$modelAggId,
-        model_aggs_df$modelName
-      )
-
-      cat("[DEBUG] Model aggregates loaded successfully, total:", length(model_aggs_list), "\n")
-      return(model_aggs_list)
-    },
-    error = function(e) {
-      cat("[ERROR] Error loading model aggregates CSV:", e$message, "\n")
-      return(list())
-    }
+  # Extract Model Aggregate ID and Model Name
+  model_aggs_list <- Map(
+    function(id, name) list(id = as.integer(id), name = as.character(name)),
+    model_aggs_df$modelAggId,
+    model_aggs_df$modelName
   )
+  
+  return(model_aggs_list)
 }
 
 # Validate bulk CSV structure and data
@@ -515,46 +489,75 @@ orionSmaServer <- function(id) {
         ))
       }
 
-      # Load products on module initialization
-      shiny::observe({
-        products_list <- load_products_from_csv()
-        values$products <- products_list
+      # Track if data has been loaded
+      products_loaded <- shiny::reactiveVal(FALSE)
+      model_aggs_loaded <- shiny::reactiveVal(FALSE)
 
-        if (length(products_list) > 0) {
-          product_names <- sapply(products_list, function(x) x$name)
-          product_ids <- sapply(products_list, function(x) x$id)
-          names(product_ids) <- product_names
-          values$product_map <- product_ids
-          values$approved_product_ids <- product_ids
+      # Load products lazily (only when user first interacts with the tab)
+      load_products_if_needed <- function() {
+        if (!products_loaded()) {
+          products_list <- load_products_from_aws()
+          values$products <- products_list
 
-          shiny::updateSelectInput(
-            session = session,
-            inputId = "product",
-            choices = product_names,
-            selected = product_names[1]
-          )
+          if (length(products_list) > 0) {
+            product_names <- sapply(products_list, function(x) x$name)
+            product_ids <- sapply(products_list, function(x) x$id)
+            names(product_ids) <- product_names
+            values$product_map <- product_ids
+            values$approved_product_ids <- product_ids
+
+            shiny::updateSelectInput(
+              session = session,
+              inputId = "product",
+              choices = product_names,
+              selected = product_names[1]
+            )
+          }
+          products_loaded(TRUE)
         }
-      })
+      }
 
-      # Load model aggregates on module initialization
-      shiny::observe({
-        model_aggs_list <- load_model_aggregates_from_csv()
-        values$model_aggregates <- model_aggs_list
+      # Load model aggregates lazily (only when user first interacts with the tab)
+      load_model_aggregates_if_needed <- function() {
+        if (!model_aggs_loaded()) {
+          model_aggs_list <- load_model_aggregates_from_aws()
+          values$model_aggregates <- model_aggs_list
 
-        if (length(model_aggs_list) > 0) {
-          model_names <- sapply(model_aggs_list, function(x) x$name)
-          model_ids <- sapply(model_aggs_list, function(x) x$id)
-          names(model_ids) <- model_names
-          values$model_agg_map <- model_ids
+          if (length(model_aggs_list) > 0) {
+            model_names <- sapply(model_aggs_list, function(x) x$name)
+            model_ids <- sapply(model_aggs_list, function(x) x$id)
+            names(model_ids) <- model_names
+            values$model_agg_map <- model_ids
 
-          shiny::updateSelectInput(
-            session = session,
-            inputId = "model_agg",
-            choices = model_names,
-            selected = model_names[1]
-          )
+            shiny::updateSelectInput(
+              session = session,
+              inputId = "model_agg",
+              choices = model_names,
+              selected = model_names[1]
+            )
+          }
+          model_aggs_loaded(TRUE)
         }
-      })
+      }
+
+      # Load data when user first interacts with key inputs
+      shiny::observeEvent(input$fetch_account, {
+        load_products_if_needed()
+        load_model_aggregates_if_needed()
+      }, ignoreInit = TRUE)
+
+      shiny::observeEvent(input$search_account, {
+        load_products_if_needed()
+        load_model_aggregates_if_needed()
+      }, ignoreInit = TRUE)
+
+      shiny::observeEvent(input$inject_asset, {
+        load_products_if_needed()
+      }, ignoreInit = TRUE)
+
+      shiny::observeEvent(input$update_model_agg, {
+        load_model_aggregates_if_needed()
+      }, ignoreInit = TRUE)
 
       # Save token to .Renviron
       shiny::observeEvent(input$save_token, {
