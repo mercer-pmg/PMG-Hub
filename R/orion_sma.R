@@ -1,8 +1,5 @@
 # Orion SMA Settings Module
 
-# Source API functions
-source("R/orion_api/orion_api.R")
-
 # Module Configuration
 PRODUCTS_CSV_PATH <- "long-short-products.csv"
 
@@ -275,7 +272,7 @@ orionSmaUI <- function(id) {
               label = NULL,
               placeholder = "Paste your API token here (or set MA_ORION_API_TOKEN env var)",
               width = "100%",
-              value = if (Sys.getenv("MA_ORION_API_TOKEN") != "") paste(rep("*", TOKEN_MASK_LENGTH), collapse = "") else ""
+              value = if (Sys.getenv("MA_ORION_API_TOKEN") != "") paste(rep("*", kdot::get_token_mask_length()), collapse = "") else ""
             ),
             shiny::actionButton(
               inputId = ns("save_token"),
@@ -518,7 +515,7 @@ orionSmaServer <- function(id) {
         shiny::withProgress(message = "Fetching account information...", value = 0, {
           shiny::incProgress(0.5)
 
-          account_result <- get_account(account_id, token, expand = "Sma,Portfolio")
+          account_result <- kdot::get_account(account_id, token, expand = "Sma,Portfolio")
 
           shiny::incProgress(1)
 
@@ -583,7 +580,7 @@ orionSmaServer <- function(id) {
 
       # Save token to .Renviron
       shiny::observeEvent(input$save_token, {
-        token <- get_token(input$token)
+        token <- kdot::get_token(input$token)
         if (is.null(token) || token == "") {
           shiny::showNotification("No token to save", type = "error")
           return()
@@ -628,7 +625,7 @@ orionSmaServer <- function(id) {
       # Search for account by number
       shiny::observeEvent(input$search_account, {
         account_number <- trimws(input$account_search_number)
-        token <- get_token(input$token)
+        token <- kdot::get_token(input$token)
 
         if (account_number == "") {
           shiny::showNotification("Please enter an account number to search", type = "error")
@@ -643,7 +640,7 @@ orionSmaServer <- function(id) {
         shiny::withProgress(message = "Searching for account...", value = 0, {
           shiny::incProgress(0.5)
 
-          search_result <- get_accounts_by_number(account_number, token, exact_match = FALSE)
+          search_result <- kdot::get_accounts_by_number(account_number, token, exact_match = FALSE)
 
           shiny::incProgress(1)
 
@@ -715,7 +712,7 @@ orionSmaServer <- function(id) {
           )
 
           # Auto-fetch account info
-          token_raw <- get_token(input$token)
+          token_raw <- kdot::get_token(input$token)
 
           if (is.null(token_raw) || token_raw == "") {
             shiny::showNotification("API token not found", type = "error")
@@ -729,9 +726,9 @@ orionSmaServer <- function(id) {
       # Fetch account info
       shiny::observeEvent(input$fetch_account, {
         account_id_raw <- input$account_id
-        token_raw <- get_token(input$token)
+        token_raw <- kdot::get_token(input$token)
 
-        validation <- validate_inputs(account_id_raw, token_raw)
+        validation <- kdot::validate_inputs(account_id_raw, token_raw)
         if (!validation$valid) {
           shiny::showNotification(validation$error, type = "error")
           return()
@@ -825,11 +822,11 @@ orionSmaServer <- function(id) {
           return()
         }
 
-        token <- get_token(input$token)
+        token <- kdot::get_token(input$token)
         if (is.null(token) || token == "") {
           return()
         }
-        assets_result <- get_account_assets(account_id, token)
+        assets_result <- kdot::get_account_assets(account_id, token)
 
         if (!assets_result$success) {
           cat("[ERROR] Failed to fetch assets:", assets_result$error, "\n")
@@ -964,9 +961,9 @@ orionSmaServer <- function(id) {
       # Inject asset
       shiny::observeEvent(input$inject_asset, {
         account_id_raw <- input$account_id
-        token_raw <- get_token(input$token)
+        token_raw <- kdot::get_token(input$token)
 
-        validation <- validate_inputs(account_id_raw, token_raw)
+        validation <- kdot::validate_inputs(account_id_raw, token_raw)
         if (!validation$valid) {
           shiny::showNotification(validation$error, type = "error")
           return()
@@ -1018,7 +1015,7 @@ orionSmaServer <- function(id) {
         shiny::withProgress(message = "Injecting asset...", value = 0, {
           shiny::incProgress(0.5)
 
-          inject_result <- post_asset(as.integer(account_id), account_number, product_id, token)
+          inject_result <- kdot::post_asset(as.integer(account_id), account_number, product_id, token)
 
           shiny::incProgress(1)
 
@@ -1071,9 +1068,9 @@ orionSmaServer <- function(id) {
       # Update SMA settings
       shiny::observeEvent(input$update_sma, {
         account_id_raw <- input$account_id
-        token_raw <- get_token(input$token)
+        token_raw <- kdot::get_token(input$token)
 
-        validation <- validate_inputs(account_id_raw, token_raw)
+        validation <- kdot::validate_inputs(account_id_raw, token_raw)
         if (!validation$valid) {
           shiny::showNotification(validation$error, type = "error")
           return()
@@ -1137,7 +1134,7 @@ orionSmaServer <- function(id) {
 
         shiny::withProgress(message = "Updating SMA settings...", value = 0, {
           shiny::incProgress(0.5)
-          sma_result <- put_account_sma(account_id, is_sma, sma_asset_id, token)
+          sma_result <- kdot::put_account_sma(account_id, is_sma, sma_asset_id, token)
 
           shiny::incProgress(1)
 
@@ -1204,10 +1201,10 @@ orionSmaServer <- function(id) {
         shiny::req(values$expected_values)
 
         account_id <- trimws(input$account_id)
-        token <- get_token(input$token)
+        token <- kdot::get_token(input$token)
 
         if (account_id != "" && !is.null(token) && token != "") {
-          verify_result <- get_account(account_id, token, expand = "Sma,Portfolio")
+          verify_result <- kdot::get_account(account_id, token, expand = "Sma,Portfolio")
 
           if (verify_result$success) {
             values$account_data <- verify_result$data
@@ -1267,9 +1264,9 @@ orionSmaServer <- function(id) {
       # Update Model Aggregate
       shiny::observeEvent(input$update_model_agg, {
         account_id_raw <- input$account_id
-        token_raw <- get_token(input$token)
+        token_raw <- kdot::get_token(input$token)
 
-        validation <- validate_inputs(account_id_raw, token_raw)
+        validation <- kdot::validate_inputs(account_id_raw, token_raw)
         if (!validation$valid) {
           shiny::showNotification(validation$error, type = "error")
           return()
@@ -1306,7 +1303,7 @@ orionSmaServer <- function(id) {
         shiny::withProgress(message = "Updating model aggregate...", value = 0, {
           shiny::incProgress(0.5)
 
-          result <- patch_account_model_aggregate(as.integer(account_id), model_agg_id, token)
+          result <- kdot::patch_account_model_aggregate(as.integer(account_id), model_agg_id, token)
 
           shiny::incProgress(1)
 
@@ -1324,7 +1321,7 @@ orionSmaServer <- function(id) {
             shiny::showNotification("Model aggregate updated successfully!", type = "message")
 
             # Refresh account data to show updated model
-            account_result <- get_account(account_id, token, expand = "Sma,Portfolio")
+            account_result <- kdot::get_account(account_id, token, expand = "Sma,Portfolio")
             if (account_result$success) {
               values$account_data <- account_result$data
               populate_settings()
@@ -1392,7 +1389,7 @@ orionSmaServer <- function(id) {
       # Handle bulk CSV processing
       shiny::observeEvent(input$process_bulk_csv, {
         # Validate token
-        token <- get_token(input$token)
+        token <- kdot::get_token(input$token)
         if (is.null(token) || token == "") {
           shiny::showNotification("API token required for bulk processing", type = "error")
           return()
@@ -1434,7 +1431,7 @@ orionSmaServer <- function(id) {
             output$bulk_progress <- shiny::renderUI(render_progress_message(progress_msg))
 
             # Process this account-product pair
-            result <- process_single_account_product(account_id, product_id, token)
+            result <- kdot::process_single_account_product(account_id, product_id, token)
 
             # Store result
             results_list[[i]] <- result
@@ -1525,7 +1522,7 @@ orionSmaServer <- function(id) {
       # Handle SMA Settings Checker
       shiny::observeEvent(input$run_checker, {
         # Validate token
-        token <- get_token(input$token)
+        token <- kdot::get_token(input$token)
         if (is.null(token) || token == "") {
           shiny::showNotification("API token required for checking SMA settings", type = "error")
           return()
@@ -1573,7 +1570,7 @@ orionSmaServer <- function(id) {
             output$checker_progress <- shiny::renderUI(render_progress_message(progress_msg))
 
             # Check this account
-            result <- check_account_sma(account_id, token)
+            result <- kdot::check_account_sma(account_id, token)
             results_list[[i]] <- result
 
             # Small delay to avoid overwhelming the API
