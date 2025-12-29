@@ -1,11 +1,4 @@
-# Orion SMA Settings Module
-
-# Module Configuration
-PRODUCTS_CSV_PATH <- "long-short-products.csv"
-
-# UI Helper Functions ----
-
-# Mask account number for display
+# UI Helper Functions
 mask_account_number <- function(account_number) {
   if (is.null(account_number) || account_number == "N/A" || nchar(account_number) <= 4) {
     return(ifelse(is.null(account_number), "N/A", account_number))
@@ -13,7 +6,6 @@ mask_account_number <- function(account_number) {
   paste0("****", substr(account_number, nchar(account_number) - 3, nchar(account_number)))
 }
 
-# Safe NULL comparison helper
 safe_equals <- function(a, b) {
   if (is.null(a) && is.null(b)) {
     return(TRUE)
@@ -24,7 +16,6 @@ safe_equals <- function(a, b) {
   a == b
 }
 
-# Extract SMA values from account data
 extract_sma_values <- function(account_data) {
   if (is.null(account_data) || !is.list(account_data) || is.null(account_data$sma)) {
     return(list(isSMA = FALSE, eclipseSMA = "False", smaAssetID = NULL))
@@ -43,7 +34,6 @@ extract_sma_values <- function(account_data) {
   )
 }
 
-# Parse account IDs from text input
 parse_account_ids <- function(account_ids_text) {
   account_ids_raw <- strsplit(trimws(account_ids_text), "[,\n]")[[1]]
   account_ids_raw <- trimws(account_ids_raw)
@@ -59,7 +49,6 @@ parse_account_ids <- function(account_ids_text) {
   account_ids
 }
 
-# Get DT table options
 get_dt_options <- function(filename_prefix = "results") {
   list(
     pageLength = 25,
@@ -74,7 +63,6 @@ get_dt_options <- function(filename_prefix = "results") {
   )
 }
 
-# Load products from AWS
 load_products_from_aws <- function() {
   cat("[DEBUG] Loading products from AWS\n")
   products_df <- kdot::get_long_short_products()
@@ -90,7 +78,6 @@ load_products_from_aws <- function() {
   return(products_list)
 }
 
-# Load model aggregates from AWS
 load_model_aggregates_from_aws <- function() {
   cat("[DEBUG] Loading model aggregates from AWS\n")
   model_aggs_df <- kdot::get_model_aggregates()
@@ -109,7 +96,6 @@ load_model_aggregates_from_aws <- function() {
   return(model_aggs_list)
 }
 
-# Validate bulk CSV structure and data
 validate_bulk_csv <- function(csv_data) {
   if (is.null(csv_data) || nrow(csv_data) == 0) {
     return(list(valid = FALSE, error = "CSV file is empty or could not be read"))
@@ -172,33 +158,37 @@ validate_bulk_csv <- function(csv_data) {
   ))
 }
 
-# UI Function ----
-
 orionSmaUI <- function(id) {
   ns <- shiny::NS(id)
 
   shiny::tagList(
     h1("Orion SMA Settings Updater"),
+    
+    "Update SMA settings for Orion accounts. Inject assets, configure SMA settings, and process bulk updates.",
+    
+    br(),
+    br(),
+    
     shiny::fluidPage(
-      # Top row: Account Number Search (full width)
-      shiny::fluidRow(
-        shiny::column(
+      # Account Number Search
+      fluidRow(
+        column(
           width = 12,
-          shiny::wellPanel(
+          wellPanel(
             h4("Search Account by Number"),
-            shiny::fluidRow(
-              shiny::column(
+            fluidRow(
+              column(
                 width = 8,
-                shiny::textInput(
+                textInput(
                   inputId = ns("account_search_number"),
                   label = NULL,
                   placeholder = "Enter account number to search",
                   width = "100%"
                 )
               ),
-              shiny::column(
+              column(
                 width = 4,
-                shiny::actionButton(
+                actionButton(
                   inputId = ns("search_account"),
                   label = "Search",
                   class = "btn-primary",
@@ -207,26 +197,25 @@ orionSmaUI <- function(id) {
                 )
               )
             ),
-            shiny::htmlOutput(ns("account_search_results"))
+            htmlOutput(ns("account_search_results"))
           )
         )
       ),
 
-      # Second row: Token and Account ID side by side
-      shiny::fluidRow(
-        # Column 1: API Token
-        shiny::column(
+      # Token and Account ID
+      fluidRow(
+        column(
           width = 6,
-          shiny::wellPanel(
+          wellPanel(
             h4("API Token"),
-            shiny::passwordInput(
+            passwordInput(
               inputId = ns("token"),
               label = NULL,
               placeholder = "Paste your API token here (or set MA_ORION_API_TOKEN env var)",
               width = "100%",
               value = if (Sys.getenv("MA_ORION_API_TOKEN") != "") paste(rep("*", kdot::get_token_mask_length()), collapse = "") else ""
             ),
-            shiny::actionButton(
+            actionButton(
               inputId = ns("save_token"),
               label = "Save Token",
               class = "btn-primary",
@@ -235,18 +224,17 @@ orionSmaUI <- function(id) {
             )
           )
         ),
-        # Column 2: Account ID
-        shiny::column(
+        column(
           width = 6,
-          shiny::wellPanel(
+          wellPanel(
             h4("Account Information"),
-            shiny::textInput(
+            textInput(
               inputId = ns("account_id"),
               label = NULL,
               placeholder = "Enter Account ID",
               width = "100%"
             ),
-            shiny::actionButton(
+            actionButton(
               inputId = ns("fetch_account"),
               label = "Fetch Account Info",
               class = "btn-primary",
@@ -257,44 +245,42 @@ orionSmaUI <- function(id) {
         )
       ),
 
-      # Third row: Account info and Asset injection side by side
-      shiny::fluidRow(
-        # Column 1: Account info display and Process Steps
-        shiny::column(
+      # Account info and Asset injection
+      fluidRow(
+        column(
           width = 6,
-          shiny::wellPanel(
+          wellPanel(
             h4("Account Information"),
-            shiny::htmlOutput(ns("account_info"))
+            htmlOutput(ns("account_info"))
           ),
-          shiny::tags$details(
+          tags$details(
             class = "well",
             open = "", # Auto-expand the details element
             style = "margin-bottom: 20px; margin-top: 15px;",
-            shiny::tags$summary(
+            tags$summary(
               style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;",
-              shiny::span("Process Steps"),
-              shiny::actionButton(
+              span("Process Steps"),
+              actionButton(
                 inputId = ns("clear_steps"),
                 label = "Clear",
                 class = "btn-sm",
                 style = "margin-left: 10px; padding: 2px 8px; font-size: 12px;"
               )
             ),
-            shiny::htmlOutput(ns("steps"))
+            htmlOutput(ns("steps"))
           )
         ),
-        # Column 2: Asset injection and SMA settings
-        shiny::column(
+        column(
           width = 6,
-          shiny::wellPanel(
+          wellPanel(
             h4("Asset Injection"),
-            shiny::selectInput(
+            selectInput(
               inputId = ns("product"),
               label = "Product:",
               choices = c("No products loaded"),
               width = "100%"
             ),
-            shiny::actionButton(
+            actionButton(
               inputId = ns("inject_asset"),
               label = "Inject Asset",
               class = "btn-primary",
@@ -302,35 +288,35 @@ orionSmaUI <- function(id) {
               style = "margin-top: 10px;"
             )
           ),
-          shiny::wellPanel(
+          wellPanel(
             h4("SMA Settings"),
-            shiny::checkboxInput(
+            checkboxInput(
               inputId = ns("is_sma"),
               label = "Is SMA",
               value = FALSE
             ),
-            shiny::selectInput(
+            selectInput(
               inputId = ns("asset"),
               label = "SMA Asset ID:",
               choices = c("None"),
               width = "100%"
             ),
-            shiny::actionButton(
+            actionButton(
               inputId = ns("update_sma"),
               label = "Update SMA Settings",
               class = "btn-primary",
               width = "100%"
             )
           ),
-          shiny::wellPanel(
+          wellPanel(
             h4("Model Aggregate Assignment"),
-            shiny::selectInput(
+            selectInput(
               inputId = ns("model_agg"),
               label = "Model Aggregate:",
               choices = c("No models loaded"),
               width = "100%"
             ),
-            shiny::actionButton(
+            actionButton(
               inputId = ns("update_model_agg"),
               label = "Update Model Aggregate",
               class = "btn-primary",
@@ -341,81 +327,81 @@ orionSmaUI <- function(id) {
         )
       ),
 
-      # Fourth row: Bulk CSV Processing
-      shiny::fluidRow(
-        shiny::column(
+      # Bulk CSV Processing
+      fluidRow(
+        column(
           width = 12,
-          shiny::tags$details(
+          tags$details(
             class = "well",
             style = "margin-bottom: 20px;",
-            shiny::tags$summary(
+            tags$summary(
               style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px;",
               "Bulk CSV Processing"
             ),
-            shiny::p("Upload a CSV file with 'Account ID' and 'Product ID' columns. The system will automatically:"),
-            shiny::tags$ul(
-              shiny::tags$li("Check if each product exists in the account"),
-              shiny::tags$li("Inject missing products"),
-              shiny::tags$li("Configure SMA settings for all products")
+            p("Upload a CSV file with 'Account ID' and 'Product ID' columns. The system will automatically:"),
+            tags$ul(
+              tags$li("Check if each product exists in the account"),
+              tags$li("Inject missing products"),
+              tags$li("Configure SMA settings for all products")
             ),
-            shiny::fileInput(
+            fileInput(
               inputId = ns("bulk_csv_file"),
               label = "CSV File (Account ID, Product ID)",
               accept = c(".csv", "text/csv"),
               width = "100%"
             ),
-            shiny::htmlOutput(ns("csv_preview")),
-            shiny::actionButton(
+            htmlOutput(ns("csv_preview")),
+            actionButton(
               inputId = ns("process_bulk_csv"),
               label = "Process Bulk CSV",
               class = "btn-primary",
               width = "100%",
               style = "margin-top: 10px; background-color: #28a745; border-color: #28a745;"
             ),
-            shiny::htmlOutput(ns("bulk_progress")),
-            shiny::br(),
-            shiny::htmlOutput(ns("bulk_results_summary")),
-            shiny::br(),
+            htmlOutput(ns("bulk_progress")),
+            br(),
+            htmlOutput(ns("bulk_results_summary")),
+            br(),
             DT::dataTableOutput(ns("bulk_results_table"))
           )
         )
       ),
 
-      # Fifth row: SMA Settings Checker
-      shiny::fluidRow(
-        shiny::column(
+      # SMA Settings Checker
+      fluidRow(
+        column(
           width = 12,
-          shiny::tags$details(
+          tags$details(
             class = "well",
             style = "margin-bottom: 20px;",
-            shiny::tags$summary(
+            tags$summary(
               style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px;",
               "SMA Settings Checker"
             ),
-            shiny::p("Enter a list of Account IDs (one per line or comma-separated) to check SMA settings for each account."),
-            shiny::tags$ul(
-              shiny::tags$li("Checks if SMA assets exist in each account"),
-              shiny::tags$li("Returns SMA settings (isSMA, eclipseSMA, smaAssetID)"),
-              shiny::tags$li("Displays results in a table")
+            p("Enter a list of Account IDs (one per line or comma-separated) to check SMA settings for each account."),
+            tags$ul(
+              tags$li("Checks if SMA assets exist in each account"),
+              tags$li("Returns SMA settings (isSMA, eclipseSMA, smaAssetID)"),
+              tags$li("Displays results in a table")
             ),
-            shiny::textAreaInput(
+            textAreaInput(
               inputId = ns("checker_account_ids"),
               label = "Account IDs (one per line or comma-separated):",
               placeholder = "1440289\n137764\n1402836",
               rows = 5,
               width = "100%"
             ),
-            shiny::actionButton(
+            actionButton(
               inputId = ns("run_checker"),
               label = "Check SMA Settings",
               class = "btn-primary",
               width = "100%",
               style = "margin-top: 10px; background-color: #17a2b8; border-color: #17a2b8;"
             ),
-            shiny::htmlOutput(ns("checker_progress")),
-            shiny::br(),
-            shiny::htmlOutput(ns("checker_summary")),
-            shiny::br(),
+            htmlOutput(ns("checker_progress")),
+            br(),
+            htmlOutput(ns("checker_summary")),
+            br(),
             DT::dataTableOutput(ns("checker_results_table"))
           )
         )
@@ -424,13 +410,10 @@ orionSmaUI <- function(id) {
   )
 }
 
-# Server Function ----
-
 orionSmaServer <- function(id) {
   shiny::moduleServer(
     id,
     function(input, output, session) {
-      # Reactive values
       values <- shiny::reactiveValues(
         account_data = NULL,
         products = list(),
@@ -448,14 +431,12 @@ orionSmaServer <- function(id) {
         checker_processing = FALSE
       )
 
-      # Helper function to append to steps history
       append_to_steps <- function(new_text) {
         separator <- if (values$steps_history != "") "<br><br><hr><br>" else ""
         values$steps_history <<- paste0(values$steps_history, separator, new_text)
         output$steps <- shiny::renderUI(shiny::HTML(values$steps_history))
       }
 
-      # Helper function to fetch and populate account
       fetch_and_populate_account <- function(account_id, token) {
         # Clear steps history if this is a new account ID
         if (!is.null(values$previous_account_id) && values$previous_account_id != account_id) {
@@ -481,7 +462,6 @@ orionSmaServer <- function(id) {
         })
       }
 
-      # Helper function to render progress message
       render_progress_message <- function(message) {
         shiny::HTML(paste0(
           "<div style='margin-top: 10px; padding: 10px; background-color: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 4px;'>",
@@ -489,11 +469,9 @@ orionSmaServer <- function(id) {
         ))
       }
 
-      # Track if data has been loaded
       products_loaded <- shiny::reactiveVal(FALSE)
       model_aggs_loaded <- shiny::reactiveVal(FALSE)
 
-      # Load products lazily (only when user first interacts with the tab)
       load_products_if_needed <- function() {
         if (!products_loaded()) {
           products_list <- load_products_from_aws()
@@ -517,7 +495,6 @@ orionSmaServer <- function(id) {
         }
       }
 
-      # Load model aggregates lazily (only when user first interacts with the tab)
       load_model_aggregates_if_needed <- function() {
         if (!model_aggs_loaded()) {
           model_aggs_list <- load_model_aggregates_from_aws()
@@ -540,27 +517,25 @@ orionSmaServer <- function(id) {
         }
       }
 
-      # Load data when user first interacts with key inputs
-      shiny::observeEvent(input$fetch_account, {
+      observeEvent(input$fetch_account, {
         load_products_if_needed()
         load_model_aggregates_if_needed()
       }, ignoreInit = TRUE)
 
-      shiny::observeEvent(input$search_account, {
+      observeEvent(input$search_account, {
         load_products_if_needed()
         load_model_aggregates_if_needed()
       }, ignoreInit = TRUE)
 
-      shiny::observeEvent(input$inject_asset, {
+      observeEvent(input$inject_asset, {
         load_products_if_needed()
       }, ignoreInit = TRUE)
 
-      shiny::observeEvent(input$update_model_agg, {
+      observeEvent(input$update_model_agg, {
         load_model_aggregates_if_needed()
       }, ignoreInit = TRUE)
 
-      # Save token to .Renviron
-      shiny::observeEvent(input$save_token, {
+      observeEvent(input$save_token, {
         token <- kdot::get_token(input$token)
         if (is.null(token) || token == "") {
           shiny::showNotification("No token to save", type = "error")
@@ -603,8 +578,7 @@ orionSmaServer <- function(id) {
         )
       })
 
-      # Search for account by number
-      shiny::observeEvent(input$search_account, {
+      observeEvent(input$search_account, {
         account_number <- trimws(input$account_search_number)
         token <- kdot::get_token(input$token)
 
@@ -682,8 +656,7 @@ orionSmaServer <- function(id) {
         })
       })
 
-      # Handle account selection from search results
-      shiny::observeEvent(input$select_account_id, {
+      observeEvent(input$select_account_id, {
         selected_id <- input$select_account_id
         if (!is.null(selected_id) && selected_id != "") {
           shiny::updateTextInput(
@@ -704,8 +677,7 @@ orionSmaServer <- function(id) {
         }
       })
 
-      # Fetch account info
-      shiny::observeEvent(input$fetch_account, {
+      observeEvent(input$fetch_account, {
         account_id_raw <- input$account_id
         token_raw <- kdot::get_token(input$token)
 
@@ -718,14 +690,12 @@ orionSmaServer <- function(id) {
         fetch_and_populate_account(validation$account_id, validation$token)
       })
 
-      # Clear process steps when refresh button is clicked
-      shiny::observeEvent(input$clear_steps, {
+      observeEvent(input$clear_steps, {
         values$steps_history <- ""
         output$steps <- shiny::renderUI(shiny::HTML(""))
         shiny::showNotification("Process steps cleared", type = "message")
       })
 
-      # Populate settings from account data
       populate_settings <- function() {
         if (is.null(values$account_data)) {
           return()
@@ -783,6 +753,8 @@ orionSmaServer <- function(id) {
           value = sma_values$isSMA
         )
 
+        load_products_if_needed()
+
         # Load assets
         load_assets()
 
@@ -792,7 +764,6 @@ orionSmaServer <- function(id) {
         }
       }
 
-      # Load assets from account
       load_assets <- function() {
         if (is.null(values$account_data)) {
           return()
@@ -920,7 +891,6 @@ orionSmaServer <- function(id) {
         }
       }
 
-      # Set selected asset in dropdown
       set_selected_asset <- function(asset_id) {
         if (length(values$assets_list) == 0) {
           return()
@@ -939,8 +909,7 @@ orionSmaServer <- function(id) {
         }
       }
 
-      # Inject asset
-      shiny::observeEvent(input$inject_asset, {
+      observeEvent(input$inject_asset, {
         account_id_raw <- input$account_id
         token_raw <- kdot::get_token(input$token)
 
@@ -1013,6 +982,8 @@ orionSmaServer <- function(id) {
             append_to_steps(steps_text)
             shiny::showNotification("Asset injected successfully!", type = "message")
 
+            load_products_if_needed()
+
             # Refresh assets
             load_assets()
 
@@ -1046,8 +1017,7 @@ orionSmaServer <- function(id) {
         })
       })
 
-      # Update SMA settings
-      shiny::observeEvent(input$update_sma, {
+      observeEvent(input$update_sma, {
         account_id_raw <- input$account_id
         token_raw <- kdot::get_token(input$token)
 
@@ -1176,8 +1146,7 @@ orionSmaServer <- function(id) {
         })
       })
 
-      # Observe refresh trigger to verify SMA update
-      shiny::observe({
+      observe({
         shiny::req(values$refresh_trigger > 0)
         shiny::req(values$expected_values)
 
@@ -1242,8 +1211,7 @@ orionSmaServer <- function(id) {
         }
       })
 
-      # Update Model Aggregate
-      shiny::observeEvent(input$update_model_agg, {
+      observeEvent(input$update_model_agg, {
         account_id_raw <- input$account_id
         token_raw <- kdot::get_token(input$token)
 
@@ -1319,8 +1287,7 @@ orionSmaServer <- function(id) {
         })
       })
 
-      # Handle CSV file upload and preview
-      shiny::observeEvent(input$bulk_csv_file, {
+      observeEvent(input$bulk_csv_file, {
         req(input$bulk_csv_file)
 
         tryCatch(
@@ -1367,8 +1334,7 @@ orionSmaServer <- function(id) {
         )
       })
 
-      # Handle bulk CSV processing
-      shiny::observeEvent(input$process_bulk_csv, {
+      observeEvent(input$process_bulk_csv, {
         # Validate token
         token <- kdot::get_token(input$token)
         if (is.null(token) || token == "") {
@@ -1500,8 +1466,7 @@ orionSmaServer <- function(id) {
         )
       })
 
-      # Handle SMA Settings Checker
-      shiny::observeEvent(input$run_checker, {
+      observeEvent(input$run_checker, {
         # Validate token
         token <- kdot::get_token(input$token)
         if (is.null(token) || token == "") {
