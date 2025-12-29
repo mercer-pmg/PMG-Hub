@@ -204,28 +204,6 @@ orionSmaUI <- function(id) {
   ns <- shiny::NS(id)
 
   shiny::tagList(
-    shiny::tags$style(HTML("
-      details.well summary {
-        list-style: none;
-        position: relative;
-        padding-left: 25px;
-      }
-      details.well summary::-webkit-details-marker {
-        display: none;
-      }
-      details.well summary::before {
-        content: '▶';
-        position: absolute;
-        left: 0;
-        color: #666;
-        font-size: 14px;
-        transition: transform 0.2s;
-      }
-      details.well[open] summary::before {
-        content: '▼';
-        transform: rotate(0deg);
-      }
-    ")),
     h1("Orion SMA Settings Updater"),
     shiny::fluidPage(
       # Top row: Account Number Search (full width)
