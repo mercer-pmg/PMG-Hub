@@ -53,6 +53,29 @@ productsAuditUI <- function(id) {
           outputId = ns("ops_update"),
           label    = "Download Ops Update"
         )
+      ),
+      column(
+        width = 12,
+
+        # Step 3
+        h3("Step 3: Check for delisted securities"),
+        "Upload Bloomberg delisted assets list as CSV (headers in row 4, data starts row 6). Compares against tickers from the query 10635 file (Step 1).",
+        shiny::fileInput(
+          inputId  = ns("delisted_csv"),
+          label    = NULL,
+          multiple = FALSE
+        ),
+        shiny::actionButton(
+          inputId = ns("delisted_submit"),
+          label   = "Check for delisted securities"
+        ),
+        shiny::downloadButton(
+          outputId = ns("do_not_buy_sell_import"),
+          label    = "Download Do Not Buy/Sell Import (XLSX)"
+        ),
+        shiny::div(style = "margin-top: 1em;"),
+        shiny::uiOutput(outputId = ns("delisted_status")),
+        shiny::tableOutput(outputId = ns("delisted_table"))
       )
     )
   )
@@ -202,6 +225,80 @@ productsAuditServer <- function(id) {
             print(paste("Risk Category output:", nrow(update_data), "records"))
 
             shiny::incProgress(1 / 4, detail = "fire 🔥")
+          })
+        }
+      )
+
+      # Step 3: Delisted securities check - runs only on submit
+      delisted_submit_clicked <- shiny::reactiveVal(FALSE)
+      delisted_is_loading <- shiny::reactiveVal(FALSE)
+      delisted_result_store <- shiny::reactiveVal(NULL)
+
+      shiny::observeEvent(input$delisted_submit, {
+        delisted_submit_clicked(TRUE)
+        delisted_is_loading(TRUE)
+        result <- tryCatch({
+          shiny::validate(
+            shiny::need(input$orion_export, "Upload the query 10635 file (Step 1)."),
+            shiny::need(input$delisted_csv, "Upload the Bloomberg delisted CSV.")
+          )
+          exp <- take_export()
+          ticker_col <- if ("Ticker" %in% names(exp)) "Ticker" else "TICKER"
+          product_tickers <- unique(exp[[ticker_col]])
+          if (is.null(product_tickers)) product_tickers <- character(0)
+          out <- kdot::check_delisted_products(product_tickers, input$delisted_csv$datapath)
+          aum_by_ticker <- exp |>
+            dplyr::group_by(.data[[ticker_col]]) |>
+            dplyr::summarise(AUM = sum(AUM, na.rm = TRUE), .groups = "drop")
+          out |>
+            dplyr::left_join(aum_by_ticker, by = c("cleaned_ticker" = ticker_col)) |>
+            dplyr::relocate(AUM, .after = cleaned_ticker)
+        }, error = function(e) {
+          delisted_is_loading(FALSE)
+          stop(e)
+        })
+        delisted_result_store(result)
+        delisted_is_loading(FALSE)
+      })
+
+      delisted_check_result <- shiny::reactive({
+        shiny::req(delisted_result_store())
+      })
+
+      output$delisted_status <- shiny::renderUI({
+        if (!delisted_submit_clicked()) {
+          return(shiny::p("Upload the query 10635 and Bloomberg delisted CSV, then click Check to run."))
+        }
+        if (delisted_is_loading()) {
+          return(shiny::div(
+            shiny::icon("spinner", class = "fa-spin fa-fw"),
+            " Processing..."
+          ))
+        }
+        NULL
+      })
+
+      output$delisted_table <- shiny::renderTable({
+        delisted_check_result()
+      })
+
+      output$do_not_buy_sell_import <- shiny::downloadHandler(
+        filename = kdot::dated_filename("Do Not Buy Sell Import", "xlsx"),
+        content = function(file) {
+          shiny::validate(shiny::need(delisted_result_store(), "Run the delisted check first."))
+          shiny::withProgress(message = "Creating import file", value = 0, {
+            shiny::incProgress(0.5, detail = "Building workbook")
+            result <- delisted_result_store()
+            trading_import <- tibble::tibble(
+              `Entity ID` = "",
+              Level = "Firm",
+              Ticker = result$cleaned_ticker,
+              `Sell Priority` = "Do Not Sell",
+              `Buy Priority` = "Do Not Buy",
+              Excluded = ""
+            )
+            shiny::incProgress(0.5, detail = "Saving file")
+            openxlsx::write.xlsx(trading_import, file, sheetName = "Sheet1")
           })
         }
       )
