@@ -90,7 +90,18 @@ portfolioBuilderUI <- function(id) {
       )
     )
   )
-  
-  
-  
+}
+
+
+#' Portfolio Builder server - placeholder
+#'
+#' Minimal server for Portfolio Builder. UI provides asset class and weight inputs;
+#' expected outcomes / calculations are not yet implemented.
+#'
+#' @param id Module namespace id
+portfolioBuilderServer <- function(id) {
+  shiny::moduleServer(id, function(input, output, session) {
+    # Placeholder: no outputs wired yet. Asset classes and weights are available
+    # via input$asset_classes1-3 and input$weight1-3 when full feature is scoped.
+  })
 }

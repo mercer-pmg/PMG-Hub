@@ -1,9 +1,16 @@
 # UI Helper Functions
 mask_account_number <- function(account_number) {
-  if (is.null(account_number) || account_number == "N/A" || nchar(account_number) <= 4) {
+  if (
+    is.null(account_number) ||
+      account_number == "N/A" ||
+      nchar(account_number) <= 4
+  ) {
     return(ifelse(is.null(account_number), "N/A", account_number))
   }
-  paste0("****", substr(account_number, nchar(account_number) - 3, nchar(account_number)))
+  paste0(
+    "****",
+    substr(account_number, nchar(account_number) - 3, nchar(account_number))
+  )
 }
 
 safe_equals <- function(a, b) {
@@ -17,7 +24,9 @@ safe_equals <- function(a, b) {
 }
 
 extract_sma_values <- function(account_data) {
-  if (is.null(account_data) || !is.list(account_data) || is.null(account_data$sma)) {
+  if (
+    is.null(account_data) || !is.list(account_data) || is.null(account_data$sma)
+  ) {
     return(list(isSMA = FALSE, eclipseSMA = "False", smaAssetID = NULL))
   }
 
@@ -29,8 +38,16 @@ extract_sma_values <- function(account_data) {
 
   list(
     isSMA = is_sma_value,
-    eclipseSMA = if (!is.null(sma$eclipseSMA)) as.character(sma$eclipseSMA) else "False",
-    smaAssetID = if (!is.null(sma$smaAssetId)) as.integer(sma$smaAssetId) else NULL
+    eclipseSMA = if (!is.null(sma$eclipseSMA)) {
+      as.character(sma$eclipseSMA)
+    } else {
+      "False"
+    },
+    smaAssetID = if (!is.null(sma$smaAssetId)) {
+      as.integer(sma$smaAssetId)
+    } else {
+      NULL
+    }
   )
 }
 
@@ -56,9 +73,20 @@ get_dt_options <- function(filename_prefix = "results") {
     scrollX = TRUE,
     dom = "Bfrtip",
     buttons = list(
-      list(extend = "copy", exportOptions = list(modifier = list(page = "all"))),
-      list(extend = "csv", filename = filename_prefix, exportOptions = list(modifier = list(page = "all"))),
-      list(extend = "excel", filename = filename_prefix, exportOptions = list(modifier = list(page = "all")))
+      list(
+        extend = "copy",
+        exportOptions = list(modifier = list(page = "all"))
+      ),
+      list(
+        extend = "csv",
+        filename = filename_prefix,
+        exportOptions = list(modifier = list(page = "all"))
+      ),
+      list(
+        extend = "excel",
+        filename = filename_prefix,
+        exportOptions = list(modifier = list(page = "all"))
+      )
     )
   )
 }
@@ -84,7 +112,9 @@ load_model_aggregates_from_aws <- function() {
   cat("[DEBUG] AWS loaded successfully, rows:", nrow(model_aggs_df), "\n")
 
   # Remove any rows with missing values
-  model_aggs_df <- model_aggs_df[!is.na(model_aggs_df$modelAggId) & !is.na(model_aggs_df$modelName), ]
+  model_aggs_df <- model_aggs_df[
+    !is.na(model_aggs_df$modelAggId) & !is.na(model_aggs_df$modelName),
+  ]
 
   # Extract Model Aggregate ID and Model Name
   model_aggs_list <- Map(
@@ -92,29 +122,42 @@ load_model_aggregates_from_aws <- function() {
     model_aggs_df$modelAggId,
     model_aggs_df$modelName
   )
-  
+
   return(model_aggs_list)
 }
 
 validate_bulk_csv <- function(csv_data) {
   if (is.null(csv_data) || nrow(csv_data) == 0) {
-    return(list(valid = FALSE, error = "CSV file is empty or could not be read"))
+    return(list(
+      valid = FALSE,
+      error = "CSV file is empty or could not be read"
+    ))
   }
 
   # Normalize column names (case-insensitive, handle spaces/underscores)
   col_names <- tolower(gsub("[_ ]", "", names(csv_data)))
 
   # Find account ID column
-  account_col_idx <- which(col_names %in% c("accountid", "account_id", "account"))
+  account_col_idx <- which(
+    col_names %in% c("accountid", "account_id", "account")
+  )
   if (length(account_col_idx) == 0) {
-    return(list(valid = FALSE, error = "CSV must contain an 'Account ID' column"))
+    return(list(
+      valid = FALSE,
+      error = "CSV must contain an 'Account ID' column"
+    ))
   }
   account_col_name <- names(csv_data)[account_col_idx[1]]
 
   # Find product ID column
-  product_col_idx <- which(col_names %in% c("productid", "product_id", "product"))
+  product_col_idx <- which(
+    col_names %in% c("productid", "product_id", "product")
+  )
   if (length(product_col_idx) == 0) {
-    return(list(valid = FALSE, error = "CSV must contain a 'Product ID' column"))
+    return(list(
+      valid = FALSE,
+      error = "CSV must contain a 'Product ID' column"
+    ))
   }
   product_col_name <- names(csv_data)[product_col_idx[1]]
 
@@ -123,20 +166,26 @@ validate_bulk_csv <- function(csv_data) {
   product_ids <- csv_data[[product_col_name]]
 
   # Remove rows with missing values
-  valid_rows <- !is.na(account_ids) & !is.na(product_ids) &
+  valid_rows <- !is.na(account_ids) &
+    !is.na(product_ids) &
     trimws(as.character(account_ids)) != "" &
     trimws(as.character(product_ids)) != ""
 
   if (sum(valid_rows) == 0) {
-    return(list(valid = FALSE, error = "No valid rows found in CSV (all rows have missing Account ID or Product ID)"))
+    return(list(
+      valid = FALSE,
+      error = "No valid rows found in CSV (all rows have missing Account ID or Product ID)"
+    ))
   }
 
   # Convert to numeric and filter valid numeric IDs
   account_ids_numeric <- suppressWarnings(as.integer(account_ids[valid_rows]))
   product_ids_numeric <- suppressWarnings(as.integer(product_ids[valid_rows]))
 
-  numeric_valid <- !is.na(account_ids_numeric) & !is.na(product_ids_numeric) &
-    account_ids_numeric > 0 & product_ids_numeric > 0
+  numeric_valid <- !is.na(account_ids_numeric) &
+    !is.na(product_ids_numeric) &
+    account_ids_numeric > 0 &
+    product_ids_numeric > 0
 
   if (sum(numeric_valid) == 0) {
     return(list(valid = FALSE, error = "No valid numeric IDs found in CSV"))
@@ -163,12 +212,12 @@ orionSmaUI <- function(id) {
 
   shiny::tagList(
     h1("Orion SMA Settings Updater"),
-    
+
     "Update SMA settings for Orion accounts. Inject assets, configure SMA settings, and process bulk updates.",
-    
+
     br(),
     br(),
-    
+
     shiny::fluidPage(
       # Account Number Search
       fluidRow(
@@ -213,7 +262,11 @@ orionSmaUI <- function(id) {
               label = NULL,
               placeholder = "Paste your API token here (or set MA_ORION_API_TOKEN env var)",
               width = "100%",
-              value = if (Sys.getenv("MA_ORION_API_TOKEN") != "") paste(rep("*", kdot::get_token_mask_length()), collapse = "") else ""
+              value = if (Sys.getenv("MA_ORION_API_TOKEN") != "") {
+                paste(rep("*", kdot::get_token_mask_length()), collapse = "")
+              } else {
+                ""
+              }
             ),
             actionButton(
               inputId = ns("save_token"),
@@ -338,7 +391,9 @@ orionSmaUI <- function(id) {
               style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px;",
               "Bulk CSV Processing"
             ),
-            p("Upload a CSV file with 'Account ID' and 'Product ID' columns. The system will automatically:"),
+            p(
+              "Upload a CSV file with 'Account ID' and 'Product ID' columns. The system will automatically:"
+            ),
             tags$ul(
               tags$li("Check if each product exists in the account"),
               tags$li("Inject missing products"),
@@ -367,6 +422,54 @@ orionSmaUI <- function(id) {
         )
       ),
 
+      # Bulk Model Aggregate Assignment
+      fluidRow(
+        column(
+          width = 12,
+          tags$details(
+            class = "well",
+            style = "margin-bottom: 20px;",
+            tags$summary(
+              style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px;",
+              "Bulk Model Aggregate Assignment"
+            ),
+            p(
+              "Enter Account IDs and select a Model Aggregate to assign to all accounts."
+            ),
+            tags$ul(
+              tags$li("Assigns the selected model aggregate to each account"),
+              tags$li("Account IDs can be one per line or comma-separated"),
+              tags$li("Displays results in a table")
+            ),
+            textAreaInput(
+              inputId = ns("bulk_model_account_ids"),
+              label = "Account IDs (one per line or comma-separated):",
+              placeholder = "1440289\n137764\n1402836",
+              rows = 5,
+              width = "100%"
+            ),
+            selectInput(
+              inputId = ns("bulk_model_agg"),
+              label = "Model Aggregate:",
+              choices = c("No models loaded"),
+              width = "100%"
+            ),
+            actionButton(
+              inputId = ns("run_bulk_model_agg"),
+              label = "Assign Model Aggregate to Accounts",
+              class = "btn-primary",
+              width = "100%",
+              style = "margin-top: 10px; background-color: #6f42c1; border-color: #6f42c1;"
+            ),
+            htmlOutput(ns("bulk_model_progress")),
+            br(),
+            htmlOutput(ns("bulk_model_summary")),
+            br(),
+            DT::dataTableOutput(ns("bulk_model_results_table"))
+          )
+        )
+      ),
+
       # SMA Settings Checker
       fluidRow(
         column(
@@ -378,7 +481,9 @@ orionSmaUI <- function(id) {
               style = "cursor: pointer; font-weight: bold; font-size: 18px; margin-bottom: 10px;",
               "SMA Settings Checker"
             ),
-            p("Enter a list of Account IDs (one per line or comma-separated) to check SMA settings for each account."),
+            p(
+              "Enter a list of Account IDs (one per line or comma-separated) to check SMA settings for each account."
+            ),
             tags$ul(
               tags$li("Checks if SMA assets exist in each account"),
               tags$li("Returns SMA settings (isSMA, eclipseSMA, smaAssetID)"),
@@ -428,44 +533,65 @@ orionSmaServer <- function(id) {
         bulk_results = NULL,
         bulk_processing = FALSE,
         checker_results = NULL,
-        checker_processing = FALSE
+        checker_processing = FALSE,
+        bulk_model_processing = FALSE
       )
 
       append_to_steps <- function(new_text) {
         separator <- if (values$steps_history != "") "<br><br><hr><br>" else ""
-        values$steps_history <<- paste0(values$steps_history, separator, new_text)
+        values$steps_history <<- paste0(
+          values$steps_history,
+          separator,
+          new_text
+        )
         output$steps <- shiny::renderUI(shiny::HTML(values$steps_history))
       }
 
       fetch_and_populate_account <- function(account_id, token) {
         # Clear steps history if this is a new account ID
-        if (!is.null(values$previous_account_id) && values$previous_account_id != account_id) {
+        if (
+          !is.null(values$previous_account_id) &&
+            values$previous_account_id != account_id
+        ) {
           values$steps_history <- ""
           output$steps <- shiny::renderUI(shiny::HTML(""))
         }
         values$previous_account_id <<- account_id
 
-        shiny::withProgress(message = "Fetching account information...", value = 0, {
-          shiny::incProgress(0.5)
+        shiny::withProgress(
+          message = "Fetching account information...",
+          value = 0,
+          {
+            shiny::incProgress(0.5)
 
-          account_result <- kdot::get_account(account_id, token, expand = "Sma,Portfolio")
+            account_result <- kdot::get_account(
+              account_id,
+              token,
+              expand = "Sma,Portfolio"
+            )
 
-          shiny::incProgress(1)
+            shiny::incProgress(1)
 
-          if (account_result$success) {
-            values$account_data <- account_result$data
-            populate_settings()
-            shiny::showNotification("Account info loaded successfully", type = "message")
-          } else {
-            shiny::showNotification(account_result$error, type = "error")
+            if (account_result$success) {
+              values$account_data <- account_result$data
+              populate_settings()
+              shiny::showNotification(
+                "Account info loaded successfully",
+                type = "message"
+              )
+            } else {
+              shiny::showNotification(account_result$error, type = "error")
+            }
           }
-        })
+        )
       }
 
       render_progress_message <- function(message) {
         shiny::HTML(paste0(
           "<div style='margin-top: 10px; padding: 10px; background-color: #e7f3ff; border: 1px solid #b3d9ff; border-radius: 4px;'>",
-          "<strong>Processing:</strong> ", message, "</div>"
+          "<strong>Processing:</strong> ",
+          message,
+          "</div>"
         ))
       }
 
@@ -512,28 +638,50 @@ orionSmaServer <- function(id) {
               choices = model_names,
               selected = model_names[1]
             )
+            shiny::updateSelectInput(
+              session = session,
+              inputId = "bulk_model_agg",
+              choices = model_names,
+              selected = model_names[1]
+            )
           }
           model_aggs_loaded(TRUE)
         }
       }
 
-      observeEvent(input$fetch_account, {
-        load_products_if_needed()
-        load_model_aggregates_if_needed()
-      }, ignoreInit = TRUE)
+      observeEvent(
+        input$fetch_account,
+        {
+          load_products_if_needed()
+          load_model_aggregates_if_needed()
+        },
+        ignoreInit = TRUE
+      )
 
-      observeEvent(input$search_account, {
-        load_products_if_needed()
-        load_model_aggregates_if_needed()
-      }, ignoreInit = TRUE)
+      observeEvent(
+        input$search_account,
+        {
+          load_products_if_needed()
+          load_model_aggregates_if_needed()
+        },
+        ignoreInit = TRUE
+      )
 
-      observeEvent(input$inject_asset, {
-        load_products_if_needed()
-      }, ignoreInit = TRUE)
+      observeEvent(
+        input$inject_asset,
+        {
+          load_products_if_needed()
+        },
+        ignoreInit = TRUE
+      )
 
-      observeEvent(input$update_model_agg, {
-        load_model_aggregates_if_needed()
-      }, ignoreInit = TRUE)
+      observeEvent(
+        input$update_model_agg,
+        {
+          load_model_aggregates_if_needed()
+        },
+        ignoreInit = TRUE
+      )
 
       observeEvent(input$save_token, {
         token <- kdot::get_token(input$token)
@@ -551,7 +699,9 @@ orionSmaServer <- function(id) {
             if (file.exists(renv_path)) {
               renv_lines <- readLines(renv_path)
               # Remove existing MA_ORION_API_TOKEN line if present
-              renv_lines <- renv_lines[!grepl("^MA_ORION_API_TOKEN=", renv_lines)]
+              renv_lines <- renv_lines[
+                !grepl("^MA_ORION_API_TOKEN=", renv_lines)
+              ]
             } else {
               renv_lines <- character(0)
             }
@@ -583,7 +733,10 @@ orionSmaServer <- function(id) {
         token <- kdot::get_token(input$token)
 
         if (account_number == "") {
-          shiny::showNotification("Please enter an account number to search", type = "error")
+          shiny::showNotification(
+            "Please enter an account number to search",
+            type = "error"
+          )
           return()
         }
 
@@ -595,7 +748,11 @@ orionSmaServer <- function(id) {
         shiny::withProgress(message = "Searching for account...", value = 0, {
           shiny::incProgress(0.5)
 
-          search_result <- kdot::get_accounts_by_number(account_number, token, exact_match = FALSE)
+          search_result <- kdot::get_accounts_by_number(
+            account_number,
+            token,
+            exact_match = FALSE
+          )
 
           shiny::incProgress(1)
 
@@ -603,14 +760,21 @@ orionSmaServer <- function(id) {
             response_data <- search_result$data
             values$account_search_results <- response_data
 
-            if (length(response_data) == 0 || (is.data.frame(response_data) && nrow(response_data) == 0)) {
+            if (
+              length(response_data) == 0 ||
+                (is.data.frame(response_data) && nrow(response_data) == 0)
+            ) {
               output$account_search_results <- shiny::renderUI({
-                shiny::HTML("<p style='color: #666; margin-top: 10px;'>No accounts found matching that number.</p>")
+                shiny::HTML(
+                  "<p style='color: #666; margin-top: 10px;'>No accounts found matching that number.</p>"
+                )
               })
             } else {
               # Convert to list if it's a data frame
               accounts_list <- if (is.data.frame(response_data)) {
-                lapply(1:nrow(response_data), function(i) as.list(response_data[i, ]))
+                lapply(1:nrow(response_data), function(i) {
+                  as.list(response_data[i, ])
+                })
               } else {
                 response_data
               }
@@ -618,26 +782,58 @@ orionSmaServer <- function(id) {
               # Build results HTML
               results_html <- paste0(
                 "<div style='margin-top: 10px;'>",
-                "<strong>Found ", length(accounts_list), " account(s):</strong><br><br>"
+                "<strong>Found ",
+                length(accounts_list),
+                " account(s):</strong><br><br>"
               )
 
               for (i in seq_along(accounts_list)) {
                 account <- accounts_list[[i]]
                 account_id <- if (!is.null(account$id)) account$id else "N/A"
-                account_name <- if (!is.null(account$name)) account$name else "N/A"
-                account_number_display <- if (!is.null(account$number)) account$number else "N/A"
-                account_custodian <- if (!is.null(account$custodian)) account$custodian else "N/A"
-                is_active <- if (!is.null(account$isActive)) account$isActive else FALSE
+                account_name <- if (!is.null(account$name)) {
+                  account$name
+                } else {
+                  "N/A"
+                }
+                account_number_display <- if (!is.null(account$number)) {
+                  account$number
+                } else {
+                  "N/A"
+                }
+                account_custodian <- if (!is.null(account$custodian)) {
+                  account$custodian
+                } else {
+                  "N/A"
+                }
+                is_active <- if (!is.null(account$isActive)) {
+                  account$isActive
+                } else {
+                  FALSE
+                }
 
                 results_html <- paste0(
                   results_html,
                   "<div style='border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 4px; background-color: #f9f9f9;'>",
-                  "<strong>Account ID:</strong> ", account_id, "<br>",
-                  "<strong>Name:</strong> ", account_name, "<br>",
-                  "<strong>Number:</strong> ", account_number_display, "<br>",
-                  "<strong>Custodian:</strong> ", account_custodian, "<br>",
-                  "<strong>Active:</strong> ", ifelse(is_active, "Yes", "No"), "<br>",
-                  "<button class='btn btn-sm' onclick=\"Shiny.setInputValue('", session$ns("select_account_id"), "', '", account_id, "', {priority: 'event'})\" style='margin-top: 5px; background-color: #9b1c7a; border-color: #9b1c7a; color: white;'>Select This Account</button>",
+                  "<strong>Account ID:</strong> ",
+                  account_id,
+                  "<br>",
+                  "<strong>Name:</strong> ",
+                  account_name,
+                  "<br>",
+                  "<strong>Number:</strong> ",
+                  account_number_display,
+                  "<br>",
+                  "<strong>Custodian:</strong> ",
+                  account_custodian,
+                  "<br>",
+                  "<strong>Active:</strong> ",
+                  ifelse(is_active, "Yes", "No"),
+                  "<br>",
+                  "<button class='btn btn-sm' onclick=\"Shiny.setInputValue('",
+                  session$ns("select_account_id"),
+                  "', '",
+                  account_id,
+                  "', {priority: 'event'})\" style='margin-top: 5px; background-color: #9b1c7a; border-color: #9b1c7a; color: white;'>Select This Account</button>",
                   "</div>"
                 )
               }
@@ -649,7 +845,11 @@ orionSmaServer <- function(id) {
             }
           } else {
             output$account_search_results <- shiny::renderUI({
-              shiny::HTML(paste0("<p style='color: #d32f2f; margin-top: 10px;'>Error: ", search_result$error, "</p>"))
+              shiny::HTML(paste0(
+                "<p style='color: #d32f2f; margin-top: 10px;'>Error: ",
+                search_result$error,
+                "</p>"
+              ))
             })
             shiny::showNotification(search_result$error, type = "error")
           }
@@ -701,15 +901,25 @@ orionSmaServer <- function(id) {
           return()
         }
 
-        account_name <- ifelse(is.null(values$account_data$name), "N/A", values$account_data$name)
+        account_name <- ifelse(
+          is.null(values$account_data$name),
+          "N/A",
+          values$account_data$name
+        )
         account_number_raw <- values$account_data$number
-        account_number <- ifelse(is.null(account_number_raw), "N/A", account_number_raw)
+        account_number <- ifelse(
+          is.null(account_number_raw),
+          "N/A",
+          account_number_raw
+        )
 
         sma_values <- extract_sma_values(values$account_data)
 
         # Extract model name from portfolio (when Portfolio is expanded)
-        model_name <- if (!is.null(values$account_data$portfolio) &&
-          !is.null(values$account_data$portfolio$modelName)) {
+        model_name <- if (
+          !is.null(values$account_data$portfolio) &&
+            !is.null(values$account_data$portfolio$modelName)
+        ) {
           as.character(values$account_data$portfolio$modelName)
         } else if (!is.null(values$account_data$modelName)) {
           # Fallback: check if modelName is at top level
@@ -723,12 +933,23 @@ orionSmaServer <- function(id) {
 
         # Update account info display
         info_text <- paste0(
-          "<strong>Account:</strong> ", account_name, " (", masked_number, ")<br><br>",
-          "<strong>Model Name:</strong> ", model_name, "<br><br>",
+          "<strong>Account:</strong> ",
+          account_name,
+          " (",
+          masked_number,
+          ")<br><br>",
+          "<strong>Model Name:</strong> ",
+          model_name,
+          "<br><br>",
           "<strong>Current SMA Status:</strong><br>",
-          "&nbsp;&nbsp;• isSMA: ", sma_values$isSMA, "<br>",
-          "&nbsp;&nbsp;• eclipseSMA: ", sma_values$eclipseSMA, "<br>",
-          "&nbsp;&nbsp;• assetID: ", ifelse(is.null(sma_values$smaAssetID), "None", sma_values$smaAssetID)
+          "&nbsp;&nbsp;• isSMA: ",
+          sma_values$isSMA,
+          "<br>",
+          "&nbsp;&nbsp;• eclipseSMA: ",
+          sma_values$eclipseSMA,
+          "<br>",
+          "&nbsp;&nbsp;• assetID: ",
+          ifelse(is.null(sma_values$smaAssetID), "None", sma_values$smaAssetID)
         )
 
         output$account_info <- shiny::renderUI({
@@ -795,11 +1016,22 @@ orionSmaServer <- function(id) {
         for (asset in assets) {
           if (is.list(asset)) {
             asset_id <- if (!is.null(asset$id)) as.integer(asset$id) else NULL
-            product_id <- if (!is.null(asset$productId)) as.integer(asset$productId) else NULL
-            asset_name <- ifelse(is.null(asset$name), paste("Asset", asset_id), asset$name)
+            product_id <- if (!is.null(asset$productId)) {
+              as.integer(asset$productId)
+            } else {
+              NULL
+            }
+            asset_name <- ifelse(
+              is.null(asset$name),
+              paste("Asset", asset_id),
+              asset$name
+            )
 
             if (!is.null(asset_id)) {
-              assets_list[[length(assets_list) + 1]] <- list(id = asset_id, name = asset_name)
+              assets_list[[length(assets_list) + 1]] <- list(
+                id = asset_id,
+                name = asset_name
+              )
               if (!is.null(product_id)) {
                 asset_product_map[[as.character(asset_id)]] <- product_id
               }
@@ -808,43 +1040,62 @@ orionSmaServer <- function(id) {
             # Handle case where asset is just an ID (like Python handles int/str)
             asset_id <- as.integer(asset)
             if (!is.na(asset_id)) {
-              assets_list[[length(assets_list) + 1]] <- list(id = asset_id, name = paste("Asset", asset_id))
+              assets_list[[length(assets_list) + 1]] <- list(
+                id = asset_id,
+                name = paste("Asset", asset_id)
+              )
               # No product_id for simple ID format
             }
           }
         }
 
-        cat("[DEBUG] Processed", length(assets_list), "assets,", length(asset_product_map), "with product IDs\n")
+        cat(
+          "[DEBUG] Processed",
+          length(assets_list),
+          "assets,",
+          length(asset_product_map),
+          "with product IDs\n"
+        )
 
         # Remove duplicates
         seen_ids <- c()
-        unique_assets <- Filter(function(asset_item) {
-          if (!asset_item$id %in% seen_ids) {
-            seen_ids <<- c(seen_ids, asset_item$id)
-            return(TRUE)
-          }
-          return(FALSE)
-        }, assets_list)
+        unique_assets <- Filter(
+          function(asset_item) {
+            if (!asset_item$id %in% seen_ids) {
+              seen_ids <<- c(seen_ids, asset_item$id)
+              return(TRUE)
+            }
+            return(FALSE)
+          },
+          assets_list
+        )
 
         # Build unique product map
         unique_product_map <- list()
         for (asset_item in unique_assets) {
           asset_id_str <- as.character(asset_item$id)
           if (asset_id_str %in% names(asset_product_map)) {
-            unique_product_map[[asset_id_str]] <- asset_product_map[[asset_id_str]]
+            unique_product_map[[asset_id_str]] <- asset_product_map[[
+              asset_id_str
+            ]]
           }
         }
 
         # Sort by name
         if (length(unique_assets) > 0) {
-          names_order <- order(sapply(unique_assets, function(x) tolower(x$name)))
+          names_order <- order(sapply(unique_assets, function(x) {
+            tolower(x$name)
+          }))
           unique_assets <- unique_assets[names_order]
         }
 
         # Filter by approved products (using original asset_product_map like Python version)
         filtered_assets <- list()
 
-        if (length(asset_product_map) > 0 && length(values$approved_product_ids) > 0) {
+        if (
+          length(asset_product_map) > 0 &&
+            length(values$approved_product_ids) > 0
+        ) {
           # Get approved product IDs as a simple vector for comparison
           approved_ids <- unname(values$approved_product_ids)
 
@@ -866,7 +1117,9 @@ orionSmaServer <- function(id) {
 
         # Update asset dropdown
         if (length(filtered_assets) > 0) {
-          asset_choices <- sapply(filtered_assets, function(x) paste0(x$name, " (", x$id, ")"))
+          asset_choices <- sapply(filtered_assets, function(x) {
+            paste0(x$name, " (", x$id, ")")
+          })
           shiny::updateSelectInput(
             session = session,
             inputId = "asset",
@@ -909,6 +1162,7 @@ orionSmaServer <- function(id) {
         }
       }
 
+      # Inject Asset
       observeEvent(input$inject_asset, {
         account_id_raw <- input$account_id
         token_raw <- kdot::get_token(input$token)
@@ -923,13 +1177,21 @@ orionSmaServer <- function(id) {
         token <- validation$token
 
         if (is.null(values$account_data)) {
-          shiny::showNotification("Please load account information first", type = "error")
+          shiny::showNotification(
+            "Please load account information first",
+            type = "error"
+          )
           return()
         }
 
         selected_product <- input$product
-        if (is.null(selected_product) || selected_product == "No products loaded") {
-          shiny::showNotification("Please select a product from the dropdown", type = "error")
+        if (
+          is.null(selected_product) || selected_product == "No products loaded"
+        ) {
+          shiny::showNotification(
+            "Please select a product from the dropdown",
+            type = "error"
+          )
           return()
         }
 
@@ -941,7 +1203,10 @@ orionSmaServer <- function(id) {
 
         account_number <- values$account_data$number
         if (is.null(account_number)) {
-          shiny::showNotification("Account number not found in account data", type = "error")
+          shiny::showNotification(
+            "Account number not found in account data",
+            type = "error"
+          )
           return()
         }
 
@@ -954,9 +1219,15 @@ orionSmaServer <- function(id) {
         steps_text <- paste0(
           "<strong>Asset Injection Process:</strong><br><br>",
           "<strong>Step 1:</strong> Preparing asset injection...<br>",
-          "&nbsp;&nbsp;• Product: ", selected_product, "<br>",
-          "&nbsp;&nbsp;• Product ID: ", product_id, "<br>",
-          "&nbsp;&nbsp;• Account Number: ", masked_account_number, "<br>",
+          "&nbsp;&nbsp;• Product: ",
+          selected_product,
+          "<br>",
+          "&nbsp;&nbsp;• Product ID: ",
+          product_id,
+          "<br>",
+          "&nbsp;&nbsp;• Account Number: ",
+          masked_account_number,
+          "<br>",
           "&nbsp;&nbsp;• Status: Manually Managed<br><br>",
           "<strong>Step 2:</strong> Creating asset via API...<br>"
         )
@@ -965,7 +1236,12 @@ orionSmaServer <- function(id) {
         shiny::withProgress(message = "Injecting asset...", value = 0, {
           shiny::incProgress(0.5)
 
-          inject_result <- kdot::post_asset(as.integer(account_id), account_number, product_id, token)
+          inject_result <- kdot::post_asset(
+            as.integer(account_id),
+            account_number,
+            product_id,
+            token
+          )
 
           shiny::incProgress(1)
 
@@ -975,12 +1251,19 @@ orionSmaServer <- function(id) {
 
             steps_text <- paste0(
               "<br><strong>Step 3:</strong> Asset created successfully!<br>",
-              if (!is.null(new_asset_id)) paste0("&nbsp;&nbsp;• New Asset ID: ", new_asset_id, "<br>") else "",
+              if (!is.null(new_asset_id)) {
+                paste0("&nbsp;&nbsp;• New Asset ID: ", new_asset_id, "<br>")
+              } else {
+                ""
+              },
               "<br><strong>Step 4:</strong> Refreshing assets list...<br>"
             )
 
             append_to_steps(steps_text)
-            shiny::showNotification("Asset injected successfully!", type = "message")
+            shiny::showNotification(
+              "Asset injected successfully!",
+              type = "message"
+            )
 
             load_products_if_needed()
 
@@ -989,11 +1272,17 @@ orionSmaServer <- function(id) {
 
             if (!is.null(new_asset_id)) {
               set_selected_asset(new_asset_id)
-              shiny::updateCheckboxInput(session = session, inputId = "is_sma", value = TRUE)
+              shiny::updateCheckboxInput(
+                session = session,
+                inputId = "is_sma",
+                value = TRUE
+              )
 
               steps_text <- paste0(
                 "<br><strong>Step 5:</strong> Process Complete!<br>",
-                "&nbsp;&nbsp;• Asset ", new_asset_id, " automatically selected<br>",
+                "&nbsp;&nbsp;• Asset ",
+                new_asset_id,
+                " automatically selected<br>",
                 "&nbsp;&nbsp;• Ready to configure SMA settings<br>"
               )
             } else {
@@ -1010,13 +1299,15 @@ orionSmaServer <- function(id) {
             shiny::showNotification(inject_result$error, type = "error")
             error_text <- paste0(
               "<strong>Asset Injection Failed:</strong><br>",
-              inject_result$error, "<br>"
+              inject_result$error,
+              "<br>"
             )
             append_to_steps(error_text)
           }
         })
       })
 
+      # Update SMA Settings
       observeEvent(input$update_sma, {
         account_id_raw <- input$account_id
         token_raw <- kdot::get_token(input$token)
@@ -1031,7 +1322,11 @@ orionSmaServer <- function(id) {
         token <- validation$token
 
         selected_asset <- input$asset
-        if (is.null(selected_asset) || selected_asset == "None" || grepl("No assets", selected_asset)) {
+        if (
+          is.null(selected_asset) ||
+            selected_asset == "None" ||
+            grepl("No assets", selected_asset)
+        ) {
           shiny::showNotification(
             "Please inject an approved asset first, or select an existing approved asset from the dropdown",
             type = "error"
@@ -1041,16 +1336,28 @@ orionSmaServer <- function(id) {
 
         # Extract asset ID from selection
         if (grepl("\\(", selected_asset) && grepl("\\)", selected_asset)) {
-          asset_id_str <- regmatches(selected_asset, regexpr("\\([0-9]+\\)", selected_asset))
+          asset_id_str <- regmatches(
+            selected_asset,
+            regexpr("\\([0-9]+\\)", selected_asset)
+          )
           asset_id_str <- gsub("[()]", "", asset_id_str)
           sma_asset_id <- as.integer(asset_id_str)
         } else {
-          shiny::showNotification("Please select an asset from the dropdown", type = "error")
+          shiny::showNotification(
+            "Please select an asset from the dropdown",
+            type = "error"
+          )
           return()
         }
 
         is_sma <- input$is_sma
-        cat("[DEBUG] Updating SMA - Asset:", sma_asset_id, ", isSMA:", is_sma, "\n")
+        cat(
+          "[DEBUG] Updating SMA - Asset:",
+          sma_asset_id,
+          ", isSMA:",
+          is_sma,
+          "\n"
+        )
 
         # Get current SMA values for comparison
         current_sma_values <- extract_sma_values(values$account_data)
@@ -1076,16 +1383,25 @@ orionSmaServer <- function(id) {
         preview_text <- paste0(
           "<strong>SMA Settings Update Process:</strong><br><br>",
           "<strong>Step 1:</strong> Review Update<br><br>",
-          "Account ID: ", account_id, "<br><br>",
+          "Account ID: ",
+          account_id,
+          "<br><br>",
           "<strong>SMA Object to Update:</strong><br>",
-          "<pre>", jsonlite::toJSON(sma_object, pretty = TRUE, auto_unbox = TRUE), "</pre><br>",
+          "<pre>",
+          jsonlite::toJSON(sma_object, pretty = TRUE, auto_unbox = TRUE),
+          "</pre><br>",
           "<strong>Step 2:</strong> Sending update to API...<br>"
         )
         append_to_steps(preview_text)
 
         shiny::withProgress(message = "Updating SMA settings...", value = 0, {
           shiny::incProgress(0.5)
-          sma_result <- kdot::put_account_sma(account_id, is_sma, sma_asset_id, token)
+          sma_result <- kdot::put_account_sma(
+            account_id,
+            is_sma,
+            sma_asset_id,
+            token
+          )
 
           shiny::incProgress(1)
 
@@ -1098,29 +1414,69 @@ orionSmaServer <- function(id) {
             )
 
             # Format change messages inline
-            old_is_sma <- if (is.null(old_values$isSMA) || length(old_values$isSMA) == 0) FALSE else old_values$isSMA
-            new_is_sma <- if (is.null(new_values$isSMA) || length(new_values$isSMA) == 0) FALSE else new_values$isSMA
-            
+            old_is_sma <- if (
+              is.null(old_values$isSMA) || length(old_values$isSMA) == 0
+            ) {
+              FALSE
+            } else {
+              old_values$isSMA
+            }
+            new_is_sma <- if (
+              is.null(new_values$isSMA) || length(new_values$isSMA) == 0
+            ) {
+              FALSE
+            } else {
+              new_values$isSMA
+            }
+
             is_sma_change <- if (old_is_sma != new_is_sma) {
-              paste0("&nbsp;&nbsp;• isSMA: ", old_is_sma, " → ", new_is_sma, "<br>")
+              paste0(
+                "&nbsp;&nbsp;• isSMA: ",
+                old_is_sma,
+                " → ",
+                new_is_sma,
+                "<br>"
+              )
             } else {
               paste0("&nbsp;&nbsp;• isSMA: ", new_is_sma, " (no change)<br>")
             }
 
-            sma_asset_id_old <- ifelse(is.null(old_values$smaAssetID), "N/A", old_values$smaAssetID)
-            sma_asset_id_change <- if (sma_asset_id_old != new_values$smaAssetID) {
-              paste0("&nbsp;&nbsp;• smaAssetID: ", sma_asset_id_old, " → ", new_values$smaAssetID, "<br>")
+            sma_asset_id_old <- ifelse(
+              is.null(old_values$smaAssetID),
+              "N/A",
+              old_values$smaAssetID
+            )
+            sma_asset_id_change <- if (
+              sma_asset_id_old != new_values$smaAssetID
+            ) {
+              paste0(
+                "&nbsp;&nbsp;• smaAssetID: ",
+                sma_asset_id_old,
+                " → ",
+                new_values$smaAssetID,
+                "<br>"
+              )
             } else {
-              paste0("&nbsp;&nbsp;• smaAssetID: ", new_values$smaAssetID, " (no change)<br>")
+              paste0(
+                "&nbsp;&nbsp;• smaAssetID: ",
+                new_values$smaAssetID,
+                " (no change)<br>"
+              )
             }
 
             success_msg <- paste0(
               "<strong>Step 3:</strong> Update Complete!<br><br>",
-              "Account ID: ", account_id, "<br><br>",
+              "Account ID: ",
+              account_id,
+              "<br><br>",
               "<strong>Changes applied:</strong><br>",
               is_sma_change,
               if (old_values$eclipseSMA != "False") {
-                paste0("&nbsp;&nbsp;• eclipseSMA: ", old_values$eclipseSMA, " → \"False\" (always set to string \"False\")<br>")
+                paste0(
+                  "&nbsp;&nbsp;• eclipseSMA: ",
+                  old_values$eclipseSMA,
+                  " → \"False\" (always set to string \"False\")<br>"
+                )
               } else {
                 "&nbsp;&nbsp;• eclipseSMA: \"False\" (no change)<br>"
               },
@@ -1129,7 +1485,10 @@ orionSmaServer <- function(id) {
             )
 
             append_to_steps(success_msg)
-            shiny::showNotification("SMA settings updated successfully!", type = "message")
+            shiny::showNotification(
+              "SMA settings updated successfully!",
+              type = "message"
+            )
 
             # Trigger refresh after a short delay
             shiny::invalidateLater(500, session)
@@ -1139,7 +1498,8 @@ orionSmaServer <- function(id) {
             shiny::showNotification(sma_result$error, type = "error")
             error_text <- paste0(
               "<br><strong>Step 3:</strong> Update Failed<br>",
-              sma_result$error, "<br>"
+              sma_result$error,
+              "<br>"
             )
             append_to_steps(error_text)
           }
@@ -1154,7 +1514,11 @@ orionSmaServer <- function(id) {
         token <- kdot::get_token(input$token)
 
         if (account_id != "" && !is.null(token) && token != "") {
-          verify_result <- kdot::get_account(account_id, token, expand = "Sma,Portfolio")
+          verify_result <- kdot::get_account(
+            account_id,
+            token,
+            expand = "Sma,Portfolio"
+          )
 
           if (verify_result$success) {
             values$account_data <- verify_result$data
@@ -1167,21 +1531,50 @@ orionSmaServer <- function(id) {
             eclipse_sma_match <- actual_values$eclipseSMA == expected$eclipseSMA
 
             # Use helper function for NULL comparison
-            asset_id_match <- safe_equals(actual_values$smaAssetID, expected$smaAssetID)
+            asset_id_match <- safe_equals(
+              actual_values$smaAssetID,
+              expected$smaAssetID
+            )
 
             all_match <- is_sma_match && eclipse_sma_match && asset_id_match
 
-            cat("[DEBUG] Verification:", ifelse(all_match, "PASSED", "FAILED"), "\n")
+            cat(
+              "[DEBUG] Verification:",
+              ifelse(all_match, "PASSED", "FAILED"),
+              "\n"
+            )
 
             verify_msg <- paste0(
-              "<br><strong>Step 5:</strong> ", ifelse(all_match, "Verification Complete!", "Verification Warning"), "<br><br>",
-              if (all_match) "All values confirmed successfully:<br>" else "Some values don't match expected:<br>"
+              "<br><strong>Step 5:</strong> ",
+              ifelse(
+                all_match,
+                "Verification Complete!",
+                "Verification Warning"
+              ),
+              "<br><br>",
+              if (all_match) {
+                "All values confirmed successfully:<br>"
+              } else {
+                "Some values don't match expected:<br>"
+              }
             )
 
             fields <- list(
-              list(name = "isSMA", actual = actual_values$isSMA, expected = expected$isSMA),
-              list(name = "eclipseSMA", actual = actual_values$eclipseSMA, expected = expected$eclipseSMA),
-              list(name = "smaAssetID", actual = actual_values$smaAssetID, expected = expected$smaAssetID)
+              list(
+                name = "isSMA",
+                actual = actual_values$isSMA,
+                expected = expected$isSMA
+              ),
+              list(
+                name = "eclipseSMA",
+                actual = actual_values$eclipseSMA,
+                expected = expected$eclipseSMA
+              ),
+              list(
+                name = "smaAssetID",
+                actual = actual_values$smaAssetID,
+                expected = expected$smaAssetID
+              )
             )
 
             for (field in fields) {
@@ -1190,16 +1583,35 @@ orionSmaServer <- function(id) {
 
               if (all_match || match) {
                 verify_msg <- paste0(
-                  verify_msg, "&nbsp;&nbsp;• ", field$name, ": ",
-                  ifelse(is.null(field$actual), "NULL", as.character(field$actual)), "<br>"
+                  verify_msg,
+                  "&nbsp;&nbsp;• ",
+                  field$name,
+                  ": ",
+                  ifelse(
+                    is.null(field$actual),
+                    "NULL",
+                    as.character(field$actual)
+                  ),
+                  "<br>"
                 )
               } else {
                 verify_msg <- paste0(
                   verify_msg,
-                  "&nbsp;&nbsp;• ", field$name, ": Expected ",
-                  ifelse(is.null(field$expected), "NULL", as.character(field$expected)),
+                  "&nbsp;&nbsp;• ",
+                  field$name,
+                  ": Expected ",
+                  ifelse(
+                    is.null(field$expected),
+                    "NULL",
+                    as.character(field$expected)
+                  ),
                   ", Got ",
-                  ifelse(is.null(field$actual), "NULL", as.character(field$actual)), "<br>"
+                  ifelse(
+                    is.null(field$actual),
+                    "NULL",
+                    as.character(field$actual)
+                  ),
+                  "<br>"
                 )
               }
             }
@@ -1226,65 +1638,309 @@ orionSmaServer <- function(id) {
 
         selected_model <- input$model_agg
         if (is.null(selected_model) || selected_model == "No models loaded") {
-          shiny::showNotification("Please select a model aggregate from the dropdown", type = "error")
+          shiny::showNotification(
+            "Please select a model aggregate from the dropdown",
+            type = "error"
+          )
           return()
         }
 
         model_agg_id <- values$model_agg_map[[selected_model]]
         if (is.null(model_agg_id)) {
-          shiny::showNotification("Invalid model aggregate selected", type = "error")
+          shiny::showNotification(
+            "Invalid model aggregate selected",
+            type = "error"
+          )
           return()
         }
 
-        cat("[DEBUG] Updating model aggregate - Model:", selected_model, ", ID:", model_agg_id, "\n")
+        cat(
+          "[DEBUG] Updating model aggregate - Model:",
+          selected_model,
+          ", ID:",
+          model_agg_id,
+          "\n"
+        )
 
         # Update steps - append to history
         steps_text <- paste0(
           "<strong>Model Aggregate Update Process:</strong><br><br>",
           "<strong>Step 1:</strong> Preparing model aggregate assignment...<br>",
-          "&nbsp;&nbsp;• Account ID: ", account_id, "<br>",
-          "&nbsp;&nbsp;• Model Aggregate: ", selected_model, "<br>",
-          "&nbsp;&nbsp;• Model Aggregate ID: ", model_agg_id, "<br><br>",
+          "&nbsp;&nbsp;• Account ID: ",
+          account_id,
+          "<br>",
+          "&nbsp;&nbsp;• Model Aggregate: ",
+          selected_model,
+          "<br>",
+          "&nbsp;&nbsp;• Model Aggregate ID: ",
+          model_agg_id,
+          "<br><br>",
           "<strong>Step 2:</strong> Sending update to API...<br>"
         )
         append_to_steps(steps_text)
 
-        shiny::withProgress(message = "Updating model aggregate...", value = 0, {
-          shiny::incProgress(0.5)
+        shiny::withProgress(
+          message = "Updating model aggregate...",
+          value = 0,
+          {
+            shiny::incProgress(0.5)
 
-          result <- kdot::patch_account_model_aggregate(as.integer(account_id), model_agg_id, token)
-
-          shiny::incProgress(1)
-
-          if (result$success) {
-            cat("[DEBUG] Model aggregate updated successfully\n")
-
-            steps_text <- paste0(
-              "<br><strong>Step 3:</strong> Update Complete!<br><br>",
-              "Account ID: ", account_id, "<br>",
-              "Model Aggregate: ", selected_model, " (ID: ", model_agg_id, ")<br>",
-              "<br><strong>Model aggregate assigned successfully!</strong><br>"
+            result <- kdot::patch_account_model_aggregate(
+              as.integer(account_id),
+              model_agg_id,
+              token
             )
 
-            append_to_steps(steps_text)
-            shiny::showNotification("Model aggregate updated successfully!", type = "message")
+            shiny::incProgress(1)
 
-            # Refresh account data to show updated model
-            account_result <- kdot::get_account(account_id, token, expand = "Sma,Portfolio")
-            if (account_result$success) {
-              values$account_data <- account_result$data
-              populate_settings()
+            if (result$success) {
+              cat("[DEBUG] Model aggregate updated successfully\n")
+
+              steps_text <- paste0(
+                "<br><strong>Step 3:</strong> Update Complete!<br><br>",
+                "Account ID: ",
+                account_id,
+                "<br>",
+                "Model Aggregate: ",
+                selected_model,
+                " (ID: ",
+                model_agg_id,
+                ")<br>",
+                "<br><strong>Model aggregate assigned successfully!</strong><br>"
+              )
+
+              append_to_steps(steps_text)
+              shiny::showNotification(
+                "Model aggregate updated successfully!",
+                type = "message"
+              )
+
+              # Refresh account data to show updated model
+              account_result <- kdot::get_account(
+                account_id,
+                token,
+                expand = "Sma,Portfolio"
+              )
+              if (account_result$success) {
+                values$account_data <- account_result$data
+                populate_settings()
+              }
+            } else {
+              cat("[ERROR] Model aggregate update failed:", result$error, "\n")
+              shiny::showNotification(result$error, type = "error")
+              error_text <- paste0(
+                "<br><strong>Step 3:</strong> Update Failed<br>",
+                result$error,
+                "<br>"
+              )
+              append_to_steps(error_text)
             }
-          } else {
-            cat("[ERROR] Model aggregate update failed:", result$error, "\n")
-            shiny::showNotification(result$error, type = "error")
-            error_text <- paste0(
-              "<br><strong>Step 3:</strong> Update Failed<br>",
-              result$error, "<br>"
-            )
-            append_to_steps(error_text)
           }
-        })
+        )
+      })
+
+      observeEvent(input$run_bulk_model_agg, {
+        # Validate token
+        token <- kdot::get_token(input$token)
+        if (is.null(token) || token == "") {
+          shiny::showNotification(
+            "API token required for bulk model assignment",
+            type = "error"
+          )
+          return()
+        }
+
+        # Parse account IDs from input
+        account_ids_text <- trimws(input$bulk_model_account_ids)
+        if (account_ids_text == "") {
+          shiny::showNotification(
+            "Please enter at least one Account ID",
+            type = "error"
+          )
+          return()
+        }
+
+        # Load model aggregates if needed
+        load_model_aggregates_if_needed()
+
+        # Validate selected model aggregate
+        selected_model <- input$bulk_model_agg
+        if (is.null(selected_model) || selected_model == "No models loaded") {
+          shiny::showNotification(
+            "Please select a model aggregate from the dropdown",
+            type = "error"
+          )
+          return()
+        }
+
+        model_agg_id <- values$model_agg_map[[selected_model]]
+        if (is.null(model_agg_id)) {
+          shiny::showNotification(
+            "Invalid model aggregate selected",
+            type = "error"
+          )
+          return()
+        }
+
+        # Prevent multiple simultaneous runs
+        if (values$bulk_model_processing) {
+          shiny::showNotification(
+            "Bulk model assignment already in progress",
+            type = "warning"
+          )
+          return()
+        }
+
+        values$bulk_model_processing <- TRUE
+
+        # Use helper function to parse account IDs
+        account_ids <- parse_account_ids(account_ids_text)
+
+        if (length(account_ids) == 0) {
+          shiny::showNotification("No valid Account IDs found", type = "error")
+          values$bulk_model_processing <- FALSE
+          return()
+        }
+
+        total_accounts <- length(account_ids)
+        results_list <- list()
+
+        # Clear previous results
+        output$bulk_model_results_table <- NULL
+
+        # Process each account
+        shiny::withProgress(
+          message = "Assigning model aggregate...",
+          value = 0,
+          {
+            for (i in 1:total_accounts) {
+              account_id <- account_ids[i]
+
+              # Update progress
+              progress_msg <- paste0(
+                "Assigning model to account ",
+                i,
+                " of ",
+                total_accounts,
+                ": ",
+                account_id
+              )
+              shiny::incProgress(1 / total_accounts, detail = progress_msg)
+
+              output$bulk_model_progress <- shiny::renderUI(render_progress_message(
+                progress_msg
+              ))
+
+              # Assign model aggregate to this account
+              result <- kdot::patch_account_model_aggregate(
+                as.integer(account_id),
+                model_agg_id,
+                token
+              )
+
+              results_list[[i]] <- list(
+                account_id = account_id,
+                status = if (result$success) "Success" else "Error",
+                message = if (result$success) {
+                  "Model aggregate assigned successfully"
+                } else {
+                  result$error
+                }
+              )
+
+              # Small delay to avoid overwhelming the API
+              Sys.sleep(0.1)
+            }
+          }
+        )
+
+        # Convert results to data frame
+        results_df <- tryCatch(
+          {
+            do.call(
+              rbind,
+              lapply(results_list, function(r) {
+                data.frame(
+                  AccountID = r$account_id,
+                  Status = r$status,
+                  Message = r$message,
+                  stringsAsFactors = FALSE
+                )
+              })
+            )
+          },
+          error = function(e) {
+            shiny::showNotification(
+              paste("Error creating results table:", e$message),
+              type = "error"
+            )
+            NULL
+          }
+        )
+
+        values$bulk_model_processing <- FALSE
+
+        # Clear progress
+        output$bulk_model_progress <- shiny::renderUI(shiny::HTML(""))
+
+        if (!is.null(results_df)) {
+          # Display summary
+          success_count <- sum(results_df$Status == "Success")
+          error_count <- sum(results_df$Status == "Error")
+
+          summary_text <- paste0(
+            "<div style='margin-top: 15px; padding: 15px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;'>",
+            "<h5>Bulk Model Assignment Complete!</h5>",
+            "<strong>Summary:</strong><br>",
+            "&nbsp;&nbsp;• Total processed: ",
+            total_accounts,
+            "<br>",
+            "&nbsp;&nbsp;• Success: <span style='color: #28a745;'>",
+            success_count,
+            "</span><br>",
+            "&nbsp;&nbsp;• Errors: <span style='color: #dc3545;'>",
+            error_count,
+            "</span><br>",
+            "&nbsp;&nbsp;• Model Aggregate: ",
+            selected_model,
+            " (ID: ",
+            model_agg_id,
+            ")<br>",
+            "</div>"
+          )
+
+          output$bulk_model_summary <- shiny::renderUI(shiny::HTML(
+            summary_text
+          ))
+
+          # Create results table
+          output$bulk_model_results_table <- DT::renderDT({
+            DT::datatable(
+              results_df,
+              options = get_dt_options("bulk_model_results"),
+              extensions = "Buttons",
+              rownames = FALSE,
+              filter = "top"
+            ) |>
+              DT::formatStyle(
+                "Status",
+                backgroundColor = DT::styleEqual(
+                  c("Success", "Error"),
+                  c("#d4edda", "#f8d7da")
+                )
+              )
+          })
+
+          shiny::showNotification(
+            paste(
+              "Bulk model assignment complete! Processed",
+              total_accounts,
+              "account(s)."
+            ),
+            type = "message",
+            duration = 5
+          )
+        }
       })
 
       observeEvent(input$bulk_csv_file, {
@@ -1292,7 +1948,10 @@ orionSmaServer <- function(id) {
 
         tryCatch(
           {
-            csv_data <- readr::read_csv(input$bulk_csv_file$datapath, show_col_types = FALSE)
+            csv_data <- readr::read_csv(
+              input$bulk_csv_file$datapath,
+              show_col_types = FALSE
+            )
             validation <- validate_bulk_csv(csv_data)
 
             if (validation$valid) {
@@ -1302,8 +1961,14 @@ orionSmaServer <- function(id) {
               preview_text <- paste0(
                 "<div style='margin-top: 10px; padding: 10px; background-color: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px;'>",
                 "<strong>✓ CSV validated successfully!</strong><br>",
-                "Found ", validation$total_rows, " valid rows.<br>",
-                "<small>Columns: ", validation$account_col, ", ", validation$product_col, "</small>",
+                "Found ",
+                validation$total_rows,
+                " valid rows.<br>",
+                "<small>Columns: ",
+                validation$account_col,
+                ", ",
+                validation$product_col,
+                "</small>",
                 "</div>"
               )
 
@@ -1338,19 +2003,28 @@ orionSmaServer <- function(id) {
         # Validate token
         token <- kdot::get_token(input$token)
         if (is.null(token) || token == "") {
-          shiny::showNotification("API token required for bulk processing", type = "error")
+          shiny::showNotification(
+            "API token required for bulk processing",
+            type = "error"
+          )
           return()
         }
 
         # Validate CSV data
         if (is.null(values$bulk_csv_data) || nrow(values$bulk_csv_data) == 0) {
-          shiny::showNotification("Please upload a valid CSV file first", type = "error")
+          shiny::showNotification(
+            "Please upload a valid CSV file first",
+            type = "error"
+          )
           return()
         }
 
         # Prevent multiple simultaneous runs
         if (values$bulk_processing) {
-          shiny::showNotification("Bulk processing already in progress", type = "warning")
+          shiny::showNotification(
+            "Bulk processing already in progress",
+            type = "warning"
+          )
           return()
         }
 
@@ -1370,15 +2044,28 @@ orionSmaServer <- function(id) {
 
             # Update progress
             progress_msg <- paste0(
-              "Processing row ", i, " of ", total_rows, "<br>",
-              "Account ID: ", account_id, " | Product ID: ", product_id
+              "Processing row ",
+              i,
+              " of ",
+              total_rows,
+              "<br>",
+              "Account ID: ",
+              account_id,
+              " | Product ID: ",
+              product_id
             )
             shiny::incProgress(1 / total_rows, detail = progress_msg)
 
-            output$bulk_progress <- shiny::renderUI(render_progress_message(progress_msg))
+            output$bulk_progress <- shiny::renderUI(render_progress_message(
+              progress_msg
+            ))
 
             # Process this account-product pair
-            result <- kdot::process_single_account_product(account_id, product_id, token)
+            result <- kdot::process_single_account_product(
+              account_id,
+              product_id,
+              token
+            )
 
             # Store result
             results_list[[i]] <- result
@@ -1391,16 +2078,19 @@ orionSmaServer <- function(id) {
         # Convert results to data frame
         results_df <- tryCatch(
           {
-            do.call(rbind, lapply(results_list, function(r) {
-              data.frame(
-                AccountID = r$account_id,
-                ProductID = r$product_id,
-                Status = r$status,
-                Message = r$message,
-                AssetID = ifelse(is.null(r$asset_id), NA, r$asset_id),
-                stringsAsFactors = FALSE
-              )
-            }))
+            do.call(
+              rbind,
+              lapply(results_list, function(r) {
+                data.frame(
+                  AccountID = r$account_id,
+                  ProductID = r$product_id,
+                  Status = r$status,
+                  Message = r$message,
+                  AssetID = ifelse(is.null(r$asset_id), NA, r$asset_id),
+                  stringsAsFactors = FALSE
+                )
+              })
+            )
           },
           error = function(e) {
             stop(e)
@@ -1416,22 +2106,37 @@ orionSmaServer <- function(id) {
         # Display results
         success_count <- sum(results_df$Status == "Success")
         error_count <- sum(results_df$Status == "Error")
-        skipped_count <- sum(results_df$Status %in% c("Skipped (already exists)", "Success (already existed)"))
+        skipped_count <- sum(
+          results_df$Status %in%
+            c("Skipped (already exists)", "Success (already existed)")
+        )
         partial_count <- sum(results_df$Status == "Partial Success")
 
         summary_text <- paste0(
           "<div style='margin-top: 15px; padding: 15px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;'>",
           "<h5>Processing Complete!</h5>",
           "<strong>Summary:</strong><br>",
-          "&nbsp;&nbsp;• Total processed: ", total_rows, "<br>",
-          "&nbsp;&nbsp;• Success: <span style='color: #28a745;'>", success_count, "</span><br>",
-          "&nbsp;&nbsp;• Skipped (already existed): <span style='color: #ffc107;'>", skipped_count, "</span><br>",
-          "&nbsp;&nbsp;• Partial success: <span style='color: #fd7e14;'>", partial_count, "</span><br>",
-          "&nbsp;&nbsp;• Errors: <span style='color: #dc3545;'>", error_count, "</span><br>",
+          "&nbsp;&nbsp;• Total processed: ",
+          total_rows,
+          "<br>",
+          "&nbsp;&nbsp;• Success: <span style='color: #28a745;'>",
+          success_count,
+          "</span><br>",
+          "&nbsp;&nbsp;• Skipped (already existed): <span style='color: #ffc107;'>",
+          skipped_count,
+          "</span><br>",
+          "&nbsp;&nbsp;• Partial success: <span style='color: #fd7e14;'>",
+          partial_count,
+          "</span><br>",
+          "&nbsp;&nbsp;• Errors: <span style='color: #dc3545;'>",
+          error_count,
+          "</span><br>",
           "</div>"
         )
 
-        output$bulk_results_summary <- shiny::renderUI(shiny::HTML(summary_text))
+        output$bulk_results_summary <- shiny::renderUI(shiny::HTML(
+          summary_text
+        ))
 
         # Create results table using helper function
         output$bulk_results_table <- tryCatch(
@@ -1447,14 +2152,23 @@ orionSmaServer <- function(id) {
                 DT::formatStyle(
                   "Status",
                   backgroundColor = DT::styleEqual(
-                    c("Success", "Success (already existed)", "Skipped (already exists)", "Partial Success", "Error"),
+                    c(
+                      "Success",
+                      "Success (already existed)",
+                      "Skipped (already exists)",
+                      "Partial Success",
+                      "Error"
+                    ),
                     c("#d4edda", "#d4edda", "#fff3cd", "#ffeaa7", "#f8d7da")
                   )
                 )
             })
           },
           error = function(e) {
-            shiny::showNotification(paste("Error rendering results table:", e$message), type = "error")
+            shiny::showNotification(
+              paste("Error rendering results table:", e$message),
+              type = "error"
+            )
             NULL
           }
         )
@@ -1470,20 +2184,29 @@ orionSmaServer <- function(id) {
         # Validate token
         token <- kdot::get_token(input$token)
         if (is.null(token) || token == "") {
-          shiny::showNotification("API token required for checking SMA settings", type = "error")
+          shiny::showNotification(
+            "API token required for checking SMA settings",
+            type = "error"
+          )
           return()
         }
 
         # Parse account IDs from input
         account_ids_text <- trimws(input$checker_account_ids)
         if (account_ids_text == "") {
-          shiny::showNotification("Please enter at least one Account ID", type = "error")
+          shiny::showNotification(
+            "Please enter at least one Account ID",
+            type = "error"
+          )
           return()
         }
 
         # Prevent multiple simultaneous runs
         if (values$checker_processing) {
-          shiny::showNotification("Checker already in progress", type = "warning")
+          shiny::showNotification(
+            "Checker already in progress",
+            type = "warning"
+          )
           return()
         }
 
@@ -1510,10 +2233,19 @@ orionSmaServer <- function(id) {
             account_id <- account_ids[i]
 
             # Update progress
-            progress_msg <- paste0("Checking account ", i, " of ", total_accounts, ": ", account_id)
+            progress_msg <- paste0(
+              "Checking account ",
+              i,
+              " of ",
+              total_accounts,
+              ": ",
+              account_id
+            )
             shiny::incProgress(1 / total_accounts, detail = progress_msg)
 
-            output$checker_progress <- shiny::renderUI(render_progress_message(progress_msg))
+            output$checker_progress <- shiny::renderUI(render_progress_message(
+              progress_msg
+            ))
 
             # Check this account
             result <- kdot::check_account_sma(account_id, token)
@@ -1527,25 +2259,39 @@ orionSmaServer <- function(id) {
         # Convert results to data frame
         results_df <- tryCatch(
           {
-            do.call(rbind, lapply(results_list, function(r) {
-              # Use helper function to mask account number
-              masked_account_number <- mask_account_number(r$account_number)
+            do.call(
+              rbind,
+              lapply(results_list, function(r) {
+                # Use helper function to mask account number
+                masked_account_number <- mask_account_number(r$account_number)
 
-              data.frame(
-                AccountID = r$account_id,
-                AccountName = ifelse(is.null(r$account_name), "N/A", r$account_name),
-                AccountNumber = masked_account_number,
-                isSMA = r$isSMA,
-                eclipseSMA = r$eclipseSMA,
-                smaAssetID = ifelse(is.null(r$smaAssetID), "None", as.character(r$smaAssetID)),
-                Status = r$status,
-                Message = r$message,
-                stringsAsFactors = FALSE
-              )
-            }))
+                data.frame(
+                  AccountID = r$account_id,
+                  AccountName = ifelse(
+                    is.null(r$account_name),
+                    "N/A",
+                    r$account_name
+                  ),
+                  AccountNumber = masked_account_number,
+                  isSMA = r$isSMA,
+                  eclipseSMA = r$eclipseSMA,
+                  smaAssetID = ifelse(
+                    is.null(r$smaAssetID),
+                    "None",
+                    as.character(r$smaAssetID)
+                  ),
+                  Status = r$status,
+                  Message = r$message,
+                  stringsAsFactors = FALSE
+                )
+              })
+            )
           },
           error = function(e) {
-            shiny::showNotification(paste("Error creating results table:", e$message), type = "error")
+            shiny::showNotification(
+              paste("Error creating results table:", e$message),
+              type = "error"
+            )
             NULL
           }
         )
@@ -1567,11 +2313,21 @@ orionSmaServer <- function(id) {
             "<div style='margin-top: 15px; padding: 15px; background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px;'>",
             "<h5>Check Complete!</h5>",
             "<strong>Summary:</strong><br>",
-            "&nbsp;&nbsp;• Total checked: ", total_accounts, "<br>",
-            "&nbsp;&nbsp;• Successfully retrieved: <span style='color: #28a745;'>", success_count, "</span><br>",
-            "&nbsp;&nbsp;• Errors: <span style='color: #dc3545;'>", error_count, "</span><br>",
-            "&nbsp;&nbsp;• Accounts with SMA enabled: <span style='color: #17a2b8;'>", sma_enabled_count, "</span><br>",
-            "&nbsp;&nbsp;• Accounts with SMA Asset ID: <span style='color: #17a2b8;'>", sma_asset_count, "</span><br>",
+            "&nbsp;&nbsp;• Total checked: ",
+            total_accounts,
+            "<br>",
+            "&nbsp;&nbsp;• Successfully retrieved: <span style='color: #28a745;'>",
+            success_count,
+            "</span><br>",
+            "&nbsp;&nbsp;• Errors: <span style='color: #dc3545;'>",
+            error_count,
+            "</span><br>",
+            "&nbsp;&nbsp;• Accounts with SMA enabled: <span style='color: #17a2b8;'>",
+            sma_enabled_count,
+            "</span><br>",
+            "&nbsp;&nbsp;• Accounts with SMA Asset ID: <span style='color: #17a2b8;'>",
+            sma_asset_count,
+            "</span><br>",
             "</div>"
           )
 
@@ -1603,7 +2359,11 @@ orionSmaServer <- function(id) {
           })
 
           shiny::showNotification(
-            paste("SMA check complete! Processed", total_accounts, "account(s)."),
+            paste(
+              "SMA check complete! Processed",
+              total_accounts,
+              "account(s)."
+            ),
             type = "message",
             duration = 5
           )
