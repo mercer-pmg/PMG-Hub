@@ -79,12 +79,12 @@ Fixed Income,US Taxable Bond,40,Intermediate Core Bond,2227
 Fixed Income,US Taxable Bond,40,Corporate Bond,2231
 Fixed Income,US Taxable Bond,40,Bank Loan,2230
 Fixed Income,US Taxable Bond,40,Non-Traditional Bond,2213
+Fixed Income,US Taxable Bond,40,Certificate of Deposit,2232
 Fixed Income,High Yield Municipal Bond,47,High Yield Municipal Bond,2250
 Fixed Income,US High Yield Taxable Bond,48,High Yield Taxable Bond,2214
 Fixed Income,International Taxable Bond,42,International Bond,2217
 Fixed Income,International Taxable Bond,42,International Bond - USD Hedged,2218
 Fixed Income,International Taxable Bond,42,Emerging Markets Bond,2229
 Cash,Cash,39,Cash,2142
-Cash,Cash Equivalents,38,Certificate of Deposit,2232
 Cash,Cash Equivalents,38,Money Market Tax-Free,2210
 Cash,Cash Equivalents,38,Money Market Taxable,2209
