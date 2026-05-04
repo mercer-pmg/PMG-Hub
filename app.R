@@ -24,26 +24,15 @@ if (nzchar(cert_path) && file.exists(cert_path)) {
   )
 }
 
-# Data Set-Up----
-strategy_aum <- aws.s3::get_object(
-  region = Sys.getenv("AWS_DEFAULT_REGION"),
-  key = Sys.getenv("AWS_ACCESS_KEY_ID"),
-  secret = Sys.getenv("AWS_SECRET_ACCESS_KEY"),
-  object = "strategies-aum.csv",
-  bucket = "aspen-investing-menu"
+# Load Data Files ----
+strategy_aum <- readr::read_csv(
+  file = file.path("data", "strategies-aum.csv"),
+  show_col_types = FALSE
+)
+orion_platform <- readr::read_csv(
+  file = file.path("data", "orion-platform.csv"),
+  show_col_types = FALSE
 ) |>
-  readBin("character") |>
-  (\(x) readr::read_csv(I(x), show_col_types = FALSE))()
-
-orion_platform <- aws.s3::get_object(
-  region = Sys.getenv("AWS_DEFAULT_REGION"),
-  key = Sys.getenv("AWS_ACCESS_KEY_ID"),
-  secret = Sys.getenv("AWS_SECRET_ACCESS_KEY"),
-  object = "orion-platform.csv",
-  bucket = "aspen-investing-menu"
-) |>
-  readBin("character") |>
-  (\(x) readr::read_csv(I(x), show_col_types = FALSE))() |>
   kdot::clean_orion_platform(
     drop_columns = c("asset_category", "market_cap", "is_SMA")
   ) |>

@@ -91,10 +91,13 @@ get_dt_options <- function(filename_prefix = "results") {
   )
 }
 
-load_products_from_aws <- function() {
-  cat("[DEBUG] Loading products from AWS\n")
-  products_df <- kdot::get_long_short_products()
-  cat("[DEBUG] AWS loaded successfully, rows:", nrow(products_df), "\n")
+load_products_from_menu_data <- function() {
+  cat("[DEBUG] Loading products from menu data\n")
+  products_df <- readr::read_csv(
+    file = file.path("data", "long-short-products.csv"),
+    show_col_types = FALSE
+  )
+  cat("[DEBUG] Menu data loaded successfully, rows:", nrow(products_df), "\n")
 
   # Extract Product ID and Product Name
   products_list <- Map(
@@ -106,10 +109,13 @@ load_products_from_aws <- function() {
   return(products_list)
 }
 
-load_model_aggregates_from_aws <- function() {
-  cat("[DEBUG] Loading model aggregates from AWS\n")
-  model_aggs_df <- kdot::get_model_aggregates()
-  cat("[DEBUG] AWS loaded successfully, rows:", nrow(model_aggs_df), "\n")
+load_model_aggregates_from_menu_data <- function() {
+  cat("[DEBUG] Loading model aggregates from menu data\n")
+  model_aggs_df <- readr::read_csv(
+    file = file.path("data", "model-aggs.csv"),
+    show_col_types = FALSE
+  )
+  cat("[DEBUG] Menu data loaded successfully, rows:", nrow(model_aggs_df), "\n")
 
   # Remove any rows with missing values
   model_aggs_df <- model_aggs_df[
@@ -600,7 +606,7 @@ orionSmaServer <- function(id) {
 
       load_products_if_needed <- function() {
         if (!products_loaded()) {
-          products_list <- load_products_from_aws()
+          products_list <- load_products_from_menu_data()
           values$products <- products_list
 
           if (length(products_list) > 0) {
@@ -623,7 +629,7 @@ orionSmaServer <- function(id) {
 
       load_model_aggregates_if_needed <- function() {
         if (!model_aggs_loaded()) {
-          model_aggs_list <- load_model_aggregates_from_aws()
+          model_aggs_list <- load_model_aggregates_from_menu_data()
           values$model_aggregates <- model_aggs_list
 
           if (length(model_aggs_list) > 0) {

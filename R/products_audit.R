@@ -238,8 +238,11 @@ productsAuditServer <- function(id) {
 
       create_ops_update <- function(upload, sleeved_products, all_local) {
         cat("[DEBUG] Creating Ops update\n")
-        cat("[DEBUG] Loading product classification framework from AWS\n")
-        framework <- kdot::get_product_classification_framework()
+        cat("[DEBUG] Loading product classification framework from menu data\n")
+        framework <- readr::read_csv(
+          file = file.path("data", "MA Product Classification Framework.csv"),
+          show_col_types = FALSE
+        )
         cat("[DEBUG] Product classification framework loaded successfully\n")
 
         result <- upload |>
