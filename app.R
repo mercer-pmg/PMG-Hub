@@ -87,6 +87,10 @@ sidebar <-
       shinydashboard::menuItem(
         text = "Orion SMA Settings",
         tabName = "orion_sma"
+      ),
+      shinydashboard::menuItem(
+        text = "Model Classifications",
+        tabName = "model_classifications"
       )
     )
   )
@@ -129,6 +133,12 @@ body <-
       shinydashboard::tabItem(
         tabName = "orion_sma",
         orionSmaUI("orion_sma")
+      ),
+
+      ## Trading model classifications (bulk)-----------------------------------
+      shinydashboard::tabItem(
+        tabName = "model_classifications",
+        modelClassificationsUI("model_classifications")
       )
     )
   )
@@ -156,6 +166,9 @@ server <- function(input, output, platform = orion_platform) {
 
   ## Orion SMA Settings----
   orionSmaServer("orion_sma")
+
+  ## Trading model classifications----
+  modelClassificationsServer("model_classifications")
 }
 
 shinyApp(ui = ui, server = server)
